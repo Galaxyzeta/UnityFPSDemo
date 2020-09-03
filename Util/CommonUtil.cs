@@ -4,11 +4,6 @@ using System.Collections.Generic;
 
 public class CommonUtil : MonoBehaviour {
 
-	public static class AnimParameters {
-		public static readonly string isReloading = "isReloading";
-		public static readonly string multReloading = "multReloading";
-	}
-
 	// Explain 1: Not actual game FPS, but the virtual FPS that the game 'looks like'.
 	// Explain 2: The amount to add in a second.
 	// -----------------------------------------------------------
@@ -34,9 +29,12 @@ public class CommonUtil : MonoBehaviour {
 		}
 	}
 
-	public static float DistanceProjectionOnCameraScreen(Camera cam, float range, float distanceToConvert) {
-		Vector3 point1 = cam.WorldToScreenPoint(cam.transform.position + new Vector3(0,0,range));
-		Vector3 point2 = cam.WorldToScreenPoint(cam.transform.position + new Vector3(0,distanceToConvert, range));
+	// Not perfect accurate ! 
+	// The calculation has an error of range 1-5 pixels
+	public static float DistanceProjectionOnCameraScreen(Camera cam, float range, float distanceAtThatRange) {
+		Transform origin = cam.transform;
+		Vector3 point1 = cam.WorldToScreenPoint(origin.position + origin.TransformPoint(new Vector3(0,-distanceAtThatRange/2,range)));
+		Vector3 point2 = cam.WorldToScreenPoint(origin.position + origin.TransformPoint(new Vector3(0,distanceAtThatRange/2,range)));
 		return Vector3.Distance(point1, point2);
 	}
 }

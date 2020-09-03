@@ -3,19 +3,35 @@ using UnityEngine.UI;
 using System.Collections.Generic;
 
 // Do not operate position/rotation directly
-public class PlayerShoot : MonoBehaviour
+public class PlayerController : MonoBehaviour
 {
+    [Header("Movement")]
+	[Tooltip("The absolute velocity magnitude when player walks")]
+	public float walkSpeed;
+	[Tooltip("The multiplier to apply when player is runnning")]
+	public float sprintSpeedMultiplier;
+    [Tooltip("Jump force to add when player jumps up")]
+    public float jumpForce = 1000f;
+    [Tooltip("The minimum distance allow to judge whether a player is floating or not")]
+    public float minFloatDistance = 0.05f;
+    [Tooltip("The layer mask used to indicate ground")]
+    public LayerMask groundMask = 1;
+    [Tooltip("The initial speed the player gained when jumps up.")]
+    public float maxVerticalSpeed = 2;
+    [Tooltip("Max slope movement detection")]
+    public float maxSlopeAngle = 30;
+    [Tooltip("Foward detect distance")]
+    public float forwardDetectDistance = 0.05f;
+
+	private PlayerMotor motor;
+    private Player player;
+    private PlayerWeaponManager weaponManager;
+	private Animator weaponAnimator;
     private Camera cam;
     private GameObject weaponPrefab;
-    private Player player;
     private LineRenderer lineRenderer;
     private BaseWeapon weaponData;
-    private PlayerWeaponManager weaponManager;
-    private PlayerMotor motor;
-
-    
     private CrossHairData crossHair;
-    public LayerMask mask;
 
     // Fov
     private float defaultFov;
@@ -26,20 +42,24 @@ public class PlayerShoot : MonoBehaviour
     private float weaponDistance;
 
     // progress | state machina helpers
-    private Vector3 bobbingRelativePosition;
     private float aimingProgress = 0;
-
+    private Vector3 bobbingRelativePosition;
     private float bobbingProgress = 0;
     private float bobbingCoolDown = 0;
     private float maxBobbingCoolDown = 60;  // Stop bobbing if you started firing. After certain amount of time, you can start bobbing again.
-
     private float recoil = 0;   // Camera goes up when firing.
     private float weaponBackRecoil = 0;     // Weapon goes backward when firing.
-
     private bool hasFired = false;  // Has fired in this frame.
     private bool hasReloadCancelled = false;   // Has [actually] fired when reloading, causing a reload to fail. EG: Shotgun fire.
     private bool isReloading = false;   // Reload lock, prevent multiple reloading coroutines operating at same time.
-    private bool isSwapping = false;
+    private bool isSwapping = false;    // All action's lock.
+
+    private int maxJumpCount = 1;   // Max time that a player can jumps;
+    private int currentJumpCount = 0;   // Current jump counter;
+    private float lastTimeJumped;    // Time stamp to mark last jump time;
+    private const float jumpPreventionTime = 0.5f;    // In this duration the player is unable to jump. Prevent multiple force appliance at the beginning of jumping.
+
+	public Animator WeaponAnimator { get => weaponAnimator; set => weaponAnimator = value; }
 
     private bool CanTryShoot() {
         return !isSwapping && weaponData.freeze == 0 &&
@@ -54,6 +74,18 @@ public class PlayerShoot : MonoBehaviour
         return !isSwapping && isReloading == false && bobbingCoolDown == 0f;
     }
 
+    private bool CanSwap() {
+        return !isReloading && !isSwapping;
+    }
+
+    private bool CanReload() {
+        return !isSwapping && !isReloading;
+    }
+
+    private bool CanSprint() {
+        return !isSwapping && !isReloading && !motor.isAir;
+    }
+
     private void CancelBobbing() {
         bobbingProgress = 0;
         bobbingCoolDown = maxBobbingCoolDown;
@@ -61,6 +93,98 @@ public class PlayerShoot : MonoBehaviour
 
     private bool IsAiming() {
         return aimingProgress > 0;
+    }
+
+    private void HandlePlayerMovement() {
+		PlayerJump();
+        PlayerMove();
+	}
+
+    private void PlayerJump() {
+        bool isJumpPressed = InputHandler.JumpKeyDown();            // Jump btn
+        bool inputLocked = lastTimeJumped + jumpPreventionTime > Time.time;       // Prevent frequent, almost-instant jump attempt.
+        
+        if(! inputLocked) {
+            // Already in the air, try detect landing.
+            // Judge whether the player is floating or not.
+            RaycastHit hit;
+            CapsuleCollider capsule = GetComponentInChildren<CapsuleCollider>();
+
+            Vector3 point2 = transform.position + capsule.center + Vector3.down * capsule.height * 0.5f;
+            float distance = (cam.transform.position - point2).magnitude + capsule.radius + minFloatDistance;
+            Physics.Raycast(player.transform.position, Vector3.down, out hit, distance, groundMask);
+
+            if(hit.collider != null) {
+                motor.isAir = false;
+                currentJumpCount = maxJumpCount;
+            } else {
+                motor.isAir = true;
+            }
+            // Try jump up. Successful only when these conditions are fulfilled :
+            // 1. The jump key is pressed, the player is grounded.
+            // 2. Max jump count not reached.
+            // 3. User's input frequency is valid.
+            bool jumpAvailableCondition = 
+                isJumpPressed && !motor.isAir && currentJumpCount-- > 0 && lastTimeJumped + jumpPreventionTime < Time.time;
+
+            if(jumpAvailableCondition) {
+                motor.isAir = true;
+                lastTimeJumped = Time.time;
+                // motor.vspeed = maxVerticalSpeed;
+                motor.ApplyJumpForce(jumpForce);
+            }
+        }
+
+    }
+
+    private void PlayerMove() {
+        // Receive input
+		float horizontalAxis = InputHandler.GetHorizontalAxis();	// Z - Movement
+		float verticalAxis = InputHandler.GetVerticalAxis();		// X - Movement
+		float viewRotX = InputHandler.GetViewVerticalAxis();		// View - X Rotation
+		float viewRotY = InputHandler.GetViewHorizontalAxis();		// View - Y Rotation
+        
+		bool isSprinting = false;
+		
+		// Apply velocity and camera rotation
+		Vector3 velocity = new Vector3(horizontalAxis, 0, verticalAxis);
+		velocity.Normalize();	// Clamp magnitude
+		velocity = transform.TransformVector(velocity);		// Local to world
+
+        // Run
+		float currentSpeed = walkSpeed;
+		if(CanSprint()) {
+            // If running key is held, and the player is tying to move:
+            if(InputHandler.SprintKeyHeld() && velocity != Vector3.zero) {
+                currentSpeed = walkSpeed * sprintSpeedMultiplier;
+                isSprinting = true;
+            }
+		}
+		// Do some animation
+		player.controller.IsRunning(isSprinting);
+
+        // Apply motion
+        // Detect available slope angle, and then move along it.
+        Vector3 resultVector = velocity;
+        Debug.Log(resultVector);
+        if(!motor.isAir && resultVector!=Vector3.zero) {
+            CapsuleCollider capsule = GetComponentInChildren<CapsuleCollider>();
+            Vector3 bottomPoint = transform.position + Vector3.down * (capsule.height * 0.5f + capsule.radius - 0.2f);
+            float moveAngle = -maxSlopeAngle;
+            
+            for(; moveAngle <= 0; moveAngle+=10) {
+                resultVector = Vector3.Slerp(velocity, transform.up*-1, -moveAngle/90);
+                if (! Physics.Raycast(bottomPoint, resultVector, forwardDetectDistance, groundMask)) {
+                    Debug.DrawRay(bottomPoint, resultVector, Color.red);
+                    break;
+                }
+            }
+        }
+        
+        // Apply movement accordingly
+		motor.ApplyVelocity(resultVector * currentSpeed);	// Scale magnitude
+		motor.ApplyRotation(Quaternion.Euler(0, viewRotY, 0));	// Restricted Rotate RB
+		motor.ApplyBasicCameraRotation(Quaternion.Euler(-viewRotX, viewRotY, 0));	// Free Rotate cam
     }
 
     // Aiming perform
@@ -164,7 +288,7 @@ public class PlayerShoot : MonoBehaviour
     // Check input for swapping weapon, then swap it down to the spawnPoint.
     // After countdown, the weapon is equipped, and it will move up to the defaultWeaponPoint.
     private void HandleWeaponSwap() {
-        if(isSwapping) {
+        if(! CanSwap()) {
             return;
         }
 
@@ -206,32 +330,39 @@ public class PlayerShoot : MonoBehaviour
     }
 
     // The entrance of shooting action.
-    private void HandleShoot() {
+    private void HandleShootInput() {
         bool isInputValid = false;
         // Check input
         switch(weaponData.fireType) {
             // Single shoot
             case BaseWeapon.FireType.MANUAL: {
-                isInputValid = Input.GetButtonDown("Fire1");
+                isInputValid = InputHandler.FireKeyDown();
                 break;
             }
             // Auto fire
             case BaseWeapon.FireType.REPEAT: {
-                isInputValid = Input.GetButton("Fire1");
+                isInputValid = InputHandler.FireKeyHeld();
                 break;
             }
             // Charged shoot
             case BaseWeapon.FireType.CHARGE: {
-                isInputValid = Input.GetButton("Fire1");
+                isInputValid = InputHandler.FireKeyUp();
                 break;
             }
         }
 
+        // Is trying to fire
         if(isInputValid) {
             if(CanTryShoot()) {
                 TryShoot();
             }
+        } else {
+            // Is charging
+            if(weaponData.fireType == BaseWeapon.FireType.CHARGE && InputHandler.FireKeyHeld()) {
+                weaponData.DoCharge();
+            }
         }
+        
     }
 
     // Perform shoot
@@ -240,37 +371,31 @@ public class PlayerShoot : MonoBehaviour
         if(weaponData.HasSufficientAmmo()) {
             hasReloadCancelled = true;
             PerformShoot();
-        } else if (isReloading == false){
-            isReloading = true;
-            Reload();
+        } else {
+            TryReload();
         }
     }
 
     // Perform actual shoot
     private void PerformShoot() {
-        weaponData.DoShoot();
+        weaponData.DoShoot(cam.transform);
         // Stop bobbing when firing.
         CancelBobbing();
         hasFired = true;
-        RaycastHit hit;
-        Vector2 bias = weaponData.GetFireAngleBias();
-        Vector3 emitPosition = cam.transform.position; //+ cam.transform.rotation * new Vector3(bias.x, bias.y, 0f);
-        Vector3 towardsDirection = cam.transform.forward;
-        if (Physics.Raycast(emitPosition, towardsDirection, out hit, weaponData.range, mask)) {
-            Debug.DrawRay(emitPosition, towardsDirection, Color.red, 2f);
-            if(hit.collider != null) {
-                Debug.DrawLine(emitPosition, hit.point, Color.magenta, 2f);
-            }
-        }
+    }
 
-        RenderRay(hit);
+    public void TryReload() {
+        if (CanReload()){
+            isReloading = true;
+            player.controller.TriggerReload();
+            Reload();
+        }
     }
 
     // Check reload input
     private void HandleReload() {
-        if(InputHandler.ReloadKeyDown() && !isReloading) {
-            isReloading = true;
-            Reload();
+        if(InputHandler.ReloadKeyDown()) {
+            TryReload();
         }
     }
 
@@ -299,17 +424,6 @@ public class PlayerShoot : MonoBehaviour
         isReloading = false;
     }
 
-    // Tell [BaseWeapon] to update its line renderer.
-    private void RenderRay(RaycastHit hit) {
-        Vector3 endPoint;
-        if(hit.collider != null) {
-            endPoint = hit.point;
-        } else {
-            endPoint = new Ray(cam.transform.position, cam.transform.forward).GetPoint(100f);
-        }
-        weaponData.EnableFireLine(endPoint);
-    }
-
     // Reset all state variables to their defaults.
     private void InitBeforeUpdate() {
         hasFired = false;
@@ -324,8 +438,11 @@ public class PlayerShoot : MonoBehaviour
     private void SubmitAnimatorStatus() {
         Animator weaponAnimator = player.GetWeaponAnimator();
         // Whether reloading animation should be played or not
-        weaponAnimator.SetBool(CommonUtil.AnimParameters.isReloading, isReloading);
-
+        player.controller.IsReloading(isReloading);
+        // Whether to reset animation to idle or not:
+        if(hasFired || IsAiming()) {
+            player.controller.TriggerReset();
+        }
         // @Improve @WIP
         AnimatorClipInfo[] clips = weaponAnimator.GetCurrentAnimatorClipInfo(0);
         float clipLength = 0;
@@ -334,38 +451,38 @@ public class PlayerShoot : MonoBehaviour
         }
         // Set weapon reloading animation speed. (1.0 x multiplier)
         if(clipLength != 0) {
-            weaponAnimator.SetFloat(CommonUtil.AnimParameters.multReloading, clipLength / weaponData.reloadTime * CommonUtil.FPS);
-            motor.overrideTransform = true;
-            Debug.Log(motor.overrideTransform);
-        } else {
-            motor.overrideTransform = false;
+            player.controller.FloatMultReloading(clipLength / weaponData.reloadTime * CommonUtil.FPS);
         }
 
     }
 
     // ==== Life span ====
+    void Awake() {
+        player = GetComponent<Player>();
+        CommonUtil.IfNullLogError<Player>(player);
 
+        motor = GetComponent<PlayerMotor>();
+        CommonUtil.IfNullLogError<PlayerMotor>(motor);
+
+        weaponManager = player.GetComponent<PlayerWeaponManager>();
+		CommonUtil.IfNullLogError<PlayerWeaponManager>(weaponManager);
+    }
     // Start is called before the first frame update
     void Start() {
-        player = GetComponent<Player>();
-        motor = GetComponent<PlayerMotor>();
-        weaponManager = player.GetComponent<PlayerWeaponManager>();
         cam = player.cam;
         weaponPrefab = player.weaponPrefab;
         weaponData = player.weaponData;
         crossHair = player.crossHair;
         defaultFov = cam.fieldOfView;
-        weaponRelativeVec = weaponPrefab.transform.position - cam.transform.position;
         camRelativeVec = cam.transform.position - this.transform.position;
-        weaponDistance = weaponRelativeVec.magnitude;
-
     }
 
     void Update() {
         InitBeforeUpdate();
 
+        HandlePlayerMovement();
         HandleWeaponSwap();
-        HandleShoot();
+        HandleShootInput();
         HandleReload();
         HandleBobbing();
         HandleRecoil();
@@ -378,4 +495,5 @@ public class PlayerShoot : MonoBehaviour
 		// Draw cross hair
 		crossHair.DrawLine(new Vector2(Screen.width / 2, Screen.height / 2));
 	}
+
 }

@@ -20,6 +20,10 @@ public class CrossHairData : MonoBehaviour {
         this.currentRadius = radius;
     }
 
+    public void SetProgressRadius(float progress) {
+        this.currentRadius = Mathf.Lerp(minScreenRadius, maxScreenRadius, progress);
+    }
+
     public void SetVisible(bool isVisible) {
         this.isVisible = isVisible;
     }

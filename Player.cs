@@ -23,7 +23,7 @@ public class Player : MonoBehaviour {
 	[Tooltip("The root that controls all sub anchors. Attach animation controller here to perform anims properly.")]
 	public GameObject anchor;
 	public Health health{get; private set;}
-
+	public BaseWeaponAnimationController controller{get; set;}
 	private PlayerWeaponManager weaponManager;
 
 	public void ChangeAnimatorOnAnchor(Animator animator) {
@@ -48,6 +48,9 @@ public class Player : MonoBehaviour {
 		weaponManager.Refresh();
 		// Weapon prefab will be set when equipping.
 		weaponManager.EquipWeapon(0);
+
+		controller = new BaseWeaponAnimationController();
+		controller.player = this;
 	}
 
 }

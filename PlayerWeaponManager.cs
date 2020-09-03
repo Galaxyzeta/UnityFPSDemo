@@ -44,14 +44,12 @@ public class PlayerWeaponManager : MonoBehaviour {
 			player.weaponPrefab = wepaonPrefab;
 			player.weaponData = baseWeapon;
 			
-			baseWeapon.SetOwner(player);
+			baseWeapon.owner = player;
 			baseWeapon.ResizeCrossHair();
 			// Init weapon's place.
 			baseWeapon.transform.position = player.GetComponent<PlayerMotor>().globalDefaultPoint.position;
 			// Handle deriviation relations in order to make animation system works properly.
 			baseWeapon.transform.SetParent(player.anchor.transform);
-			// Attach animator on baseweapon to the anchor point.
-			// player.ChangeAnimatorOnAnchor(baseWeapon.animator);
 
 			if(weaponCurrent != -1) {
 				// Disable old weapon.
@@ -62,6 +60,13 @@ public class PlayerWeaponManager : MonoBehaviour {
 			return true;
 		}
 		return false;
+	}
+
+	private void ToggleChildColliders(GameObject weaponInstance, bool enabled) {
+		Collider[] childColliders = weaponInstance.GetComponentsInChildren<Collider>();
+		foreach(Collider collider in childColliders) {
+			collider.enabled = enabled;
+		}
 	}
 
 	// Whether the weapon to equip exists.
@@ -92,6 +97,9 @@ public class PlayerWeaponManager : MonoBehaviour {
 			weaponBag[i] = Instantiate(weaponBag[i]);
 			// Let the weapon move with cam
 			weaponBag[i].transform.parent = player.cam.transform;
+			// Make child collider useless
+			ToggleChildColliders(weaponBag[i], false);
+			// Deactive unequipped weapons
 			weaponBag[i].SetActive(false);
 		}
 		this.currentLength = i;

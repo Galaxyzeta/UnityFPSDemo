@@ -3,9 +3,6 @@ using UnityEngine;
 public class PlayerMotor : MonoBehaviour {
 
 	private Rigidbody rb;
-	public float verticalAngleRestriction = 89f;
-
-	private float aimProgress = 0f;
 
 	private Player player;
 	private Camera cam;
@@ -14,6 +11,7 @@ public class PlayerMotor : MonoBehaviour {
 	private Vector3 velocity;
 	private Quaternion playerRotation;
 	private float thrustForce;
+	private float jumpForce;
 	private Quaternion camOffsetRotation;
 
 	private Quaternion basicCamRotation;
@@ -25,11 +23,13 @@ public class PlayerMotor : MonoBehaviour {
 
 	private float camFov;
 
+	public float gravity = 0.1f;
+	public float maxVerticalSpeed = 2f;
+	public float verticalAngleRestriction = 89f;
 	public Transform globalDefaultPoint;
     public Transform globalAimPoint;
 	public Transform globalWeaponSpawnPoint;
-
-	public bool overrideTransform {get; set;} = false;
+	public bool isAir {get; set;} = true;
 
 	public void ApplyVelocity(Vector3 deltaVelocity) {
 		this.velocity += deltaVelocity;
@@ -37,6 +37,10 @@ public class PlayerMotor : MonoBehaviour {
 
 	public void ApplyThrustForce(float thrustForce) {
 		this.thrustForce += thrustForce;
+	}
+
+	public void ApplyJumpForce(float jumpForce) {
+		this.jumpForce = jumpForce;
 	}
 
 	public void ApplyRotation(Quaternion deltaRotation) {
@@ -59,10 +63,15 @@ public class PlayerMotor : MonoBehaviour {
 		this.basicCamRotation *= rotation;
 	}
 
-	public void ClearData() {
-		velocity = weaponOffsetPosition = weaponlocalPositionOffset = Vector3.zero;
+	public void ResetUpdateCache() {
+		weaponOffsetPosition = weaponlocalPositionOffset = Vector3.zero;
 		playerRotation = camOffsetRotation = weaponOffSetRotation = Quaternion.Euler(0f,0f,0f);
-		thrustForce = 0f;
+		
+	}
+
+	public void ResetFixedUpdateCache() {
+		thrustForce = jumpForce = 0f;
+		velocity = Vector3.zero;
 	}
 
 	private float ConvertAngle(float angle) {
@@ -100,7 +109,6 @@ public class PlayerMotor : MonoBehaviour {
 	// ==== Life Span ====
 
 	void Start() {
-		Debug.Log("Motor");
 		// Fetch resources
 		rb = gameObject.GetComponent<Rigidbody>();
 		player = gameObject.GetComponent<Player>();
@@ -111,23 +119,35 @@ public class PlayerMotor : MonoBehaviour {
 		basicCamRotation = cam.transform.rotation;
 		
 		// Clear data for initial use.
-		ClearData();
+		ResetFixedUpdateCache();
+		ResetUpdateCache();
+	}
+
+	void FixedUpdate() {
+		
+		// General movement
+		if(velocity != Vector3.zero) {
+            rb.MovePosition(transform.position + velocity * Time.fixedDeltaTime);
+        }
+		// Thruster movement
+        if(thrustForce > 0f) {
+            rb.AddForce(thrustForce * transform.up * Time.fixedDeltaTime, ForceMode.Acceleration);
+        }
+		// Jump
+		if(jumpForce > 0) {
+			rb.AddForce(new Vector3(0, jumpForce * Time.fixedDeltaTime, 0), ForceMode.VelocityChange);
+		}
+
+		// Clean up data to prevent accumulations
+		ResetFixedUpdateCache();
+		
 	}
 
 	// Calculate player's movement all in this function.
 	void LateUpdate() {
 		// Keep variable up-to-date. (A substitution of C lang pointer! )
 		weaponPrefab = player.weaponPrefab;
-
-		// General movement
-		if(velocity != Vector3.zero) {
-            rb.MovePosition(transform.position + velocity * Time.deltaTime);
-        }
-		// Thruster movement
-        if(thrustForce > 0f) {
-            rb.AddForce(thrustForce * transform.up * Time.deltaTime, ForceMode.Acceleration);
-        }
-
+		
 		// General rotation: player, cam, weapon.
 		// Rigidbody rotation only operate Y-Axis (horizontal rotation) !
         rb.MoveRotation(rb.rotation * playerRotation);
@@ -145,8 +165,8 @@ public class PlayerMotor : MonoBehaviour {
 
 		// Weapon position: using localposition is much more easier!
 		weaponPrefab.transform.localPosition = this.weaponlocalPositionOffset;
+
+		ResetUpdateCache();
 		
-		// Clean up data to prevent accumulations
-		ClearData();
 	}
 }
