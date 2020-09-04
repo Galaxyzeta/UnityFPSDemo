@@ -29,7 +29,6 @@ public class PlayerMotor : MonoBehaviour {
 	public Transform globalDefaultPoint;
     public Transform globalAimPoint;
 	public Transform globalWeaponSpawnPoint;
-	public bool isAir {get; set;} = true;
 
 	public void ApplyVelocity(Vector3 deltaVelocity) {
 		this.velocity += deltaVelocity;

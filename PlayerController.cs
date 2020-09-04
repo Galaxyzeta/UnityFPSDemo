@@ -16,11 +16,9 @@ public class PlayerController : MonoBehaviour
     public float minFloatDistance = 0.05f;
     [Tooltip("The layer mask used to indicate ground")]
     public LayerMask groundMask = 1;
-    [Tooltip("The initial speed the player gained when jumps up.")]
-    public float maxVerticalSpeed = 2;
-    [Tooltip("Max slope movement detection")]
+    [Tooltip("Max slope movement detection range")]
     public float maxSlopeAngle = 30;
-    [Tooltip("Foward detect distance")]
+    [Tooltip("Foward detect distance, used to accurate slope movement")]
     public float forwardDetectDistance = 0.05f;
 
 	private PlayerMotor motor;
@@ -58,7 +56,7 @@ public class PlayerController : MonoBehaviour
     private int currentJumpCount = 0;   // Current jump counter;
     private float lastTimeJumped;    // Time stamp to mark last jump time;
     private const float jumpPreventionTime = 0.5f;    // In this duration the player is unable to jump. Prevent multiple force appliance at the beginning of jumping.
-
+    private bool isAir = true;
 	public Animator WeaponAnimator { get => weaponAnimator; set => weaponAnimator = value; }
 
     private bool CanTryShoot() {
@@ -83,7 +81,7 @@ public class PlayerController : MonoBehaviour
     }
 
     private bool CanSprint() {
-        return !isSwapping && !isReloading && !motor.isAir;
+        return !isSwapping && !isReloading && !isAir;
     }
 
     private void CancelBobbing() {
@@ -96,11 +94,17 @@ public class PlayerController : MonoBehaviour
     }
 
     private void HandlePlayerMovement() {
-		PlayerJump();
-        PlayerMove();
+        float unstabilityModify = 0;
+		PlayerJump(ref unstabilityModify);
+        PlayerMove(ref unstabilityModify);
+        ApplyBaseUnstability(unstabilityModify);
 	}
 
-    private void PlayerJump() {
+    private void ApplyBaseUnstability(float unstabilityModify) {
+        weaponData.baseUnstability = unstabilityModify;
+    }
+
+    private void PlayerJump(ref float unstabilityModify) {
         bool isJumpPressed = InputHandler.JumpKeyDown();            // Jump btn
         bool inputLocked = lastTimeJumped + jumpPreventionTime > Time.time;       // Prevent frequent, almost-instant jump attempt.
         
@@ -115,29 +119,33 @@ public class PlayerController : MonoBehaviour
             Physics.Raycast(player.transform.position, Vector3.down, out hit, distance, groundMask);
 
             if(hit.collider != null) {
-                motor.isAir = false;
+                isAir = false;
                 currentJumpCount = maxJumpCount;
             } else {
-                motor.isAir = true;
+                isAir = true;
             }
             // Try jump up. Successful only when these conditions are fulfilled :
             // 1. The jump key is pressed, the player is grounded.
             // 2. Max jump count not reached.
             // 3. User's input frequency is valid.
             bool jumpAvailableCondition = 
-                isJumpPressed && !motor.isAir && currentJumpCount-- > 0 && lastTimeJumped + jumpPreventionTime < Time.time;
+                isJumpPressed && !isAir && currentJumpCount-- > 0 && lastTimeJumped + jumpPreventionTime < Time.time;
 
             if(jumpAvailableCondition) {
-                motor.isAir = true;
+                isAir = true;
                 lastTimeJumped = Time.time;
-                // motor.vspeed = maxVerticalSpeed;
                 motor.ApplyJumpForce(jumpForce);
             }
         }
 
+        if(isAir) {
+            // @Warning : Loosely designed, magic number
+            unstabilityModify += 20;
+        }
+
     }
 
-    private void PlayerMove() {
+    private void PlayerMove(ref float unstabilityModify) {
         // Receive input
 		float horizontalAxis = InputHandler.GetHorizontalAxis();	// Z - Movement
 		float verticalAxis = InputHandler.GetVerticalAxis();		// X - Movement
@@ -166,8 +174,7 @@ public class PlayerController : MonoBehaviour
         // Apply motion
         // Detect available slope angle, and then move along it.
         Vector3 resultVector = velocity;
-        Debug.Log(resultVector);
-        if(!motor.isAir && resultVector!=Vector3.zero) {
+        if(!isAir && resultVector!=Vector3.zero) {
             CapsuleCollider capsule = GetComponentInChildren<CapsuleCollider>();
             Vector3 bottomPoint = transform.position + Vector3.down * (capsule.height * 0.5f + capsule.radius - 0.2f);
             float moveAngle = -maxSlopeAngle;
@@ -175,16 +182,19 @@ public class PlayerController : MonoBehaviour
             for(; moveAngle <= 0; moveAngle+=10) {
                 resultVector = Vector3.Slerp(velocity, transform.up*-1, -moveAngle/90);
                 if (! Physics.Raycast(bottomPoint, resultVector, forwardDetectDistance, groundMask)) {
-                    Debug.DrawRay(bottomPoint, resultVector, Color.red);
                     break;
                 }
             }
         }
         
         // Apply movement accordingly
+        Vector3 resultVelocity = resultVector * currentSpeed;
 		motor.ApplyVelocity(resultVector * currentSpeed);	// Scale magnitude
 		motor.ApplyRotation(Quaternion.Euler(0, viewRotY, 0));	// Restricted Rotate RB
 		motor.ApplyBasicCameraRotation(Quaternion.Euler(-viewRotX, viewRotY, 0));	// Free Rotate cam
+
+        // Add unstability to weapon
+        unstabilityModify += resultVelocity.magnitude * 10;
     }
 
     // Aiming perform
@@ -318,7 +328,7 @@ public class PlayerController : MonoBehaviour
         }
         // 2. Update(Equip) new weapon prefab and its data.
         weaponManager.EquipWeapon(weaponIndex);
-        yield return 0;
+
         // 3. Swap weapon up.
         for(float i=0; i<weaponData.swapWeaponTime; i+=CommonUtil.GetStepUpdate()) {
             Vector3 relativePosition = Vector3.Lerp(motor.globalWeaponSpawnPoint.localPosition, Vector3.zero, i/weaponData.swapWeaponTime);

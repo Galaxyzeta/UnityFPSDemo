@@ -37,4 +37,24 @@ public class CommonUtil : MonoBehaviour {
 		Vector3 point2 = cam.WorldToScreenPoint(origin.position + origin.TransformPoint(new Vector3(0,distanceAtThatRange/2,range)));
 		return Vector3.Distance(point1, point2);
 	}
+
+	public static T GetComponentFromSelfOrParent<T>(Component gameObject) {
+		T component = gameObject.GetComponent<T>();
+		if(component != null) {
+			return component;
+		} else {
+			component = gameObject.GetComponentInParent<T>();
+			return component;
+		}
+	}
+
+	public static T GetComponentFromSelfOrChildren<T>(Component gameObject) {
+		T component = gameObject.GetComponent<T>();
+		if(component != null) {
+			return component;
+		} else {
+			component = gameObject.GetComponentInChildren<T>();
+			return component;
+		}
+	}
 }

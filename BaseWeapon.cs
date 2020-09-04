@@ -24,6 +24,11 @@ public class BaseWeapon : MonoBehaviour
 	public Animator animator;
 	public LayerMask mask;
 
+	[Header("ProjectileOnly")]
+	public GameObject projectilePrefab = null;
+	public float inflictForce = 100f;
+	public float projectileFlyingSpeed = 5f;
+
 	[Header("Ammo")]
 	public float reloadTime = 60;
 	public float currentAmmo = 20;
@@ -34,7 +39,7 @@ public class BaseWeapon : MonoBehaviour
 	[Header("Damage")]
 	public float maxDamage = 20;
 	public float minDamage = 10;
-	public float damageDecayDistance = 0.5f;
+	public float damageDecayRatio = 0.5f;
 	
 	[Header("Recoil")]
 	public float maxRecoil = 10;
@@ -69,45 +74,60 @@ public class BaseWeapon : MonoBehaviour
 	public GameObject debugHitPointPrefab;
 
 	// private / partly private
-	private LineRenderer lineRenderer;
-	public Vector3 bodyToAimRelative {get; private set;}
-	public Player owner {get; set;}
-	public float currentCharge = 0;
+	protected LineRenderer lineRenderer;
+	public Vector3 bodyToAimRelative {get; protected set;}
+	public Actor owner {get; set;}
+	public float baseUnstability {get; set;}
+	public float currentCharge {get;set;} = 0;
+	public bool ownerIsPlayer = false;
 
 	public bool HasSufficientAmmo() {
 		return currentAmmo >= ammoConsumptionPerShot;
 	}
 
-	private void ConsumeAmmo(float ammoConsumption) {
+	protected void ConsumeAmmo(float ammoConsumption) {
 		currentAmmo -= ammoConsumption;
 		currentAmmo = currentAmmo < 0? 0: currentAmmo;
 	}
 
-	private void IncreaseUnstability() {
+	protected void IncreaseUnstability() {
 		unstability += unstabilityIncrement;
-		unstability = unstability > maxUnstability? maxUnstability: unstability;
+		float acutalUnstability = unstability + baseUnstability;
+		unstability = acutalUnstability > maxUnstability? maxUnstability: acutalUnstability;
 	}
 
-	private void ResetFreeze() {
+	protected void ResetFreeze() {
 		freeze = maxFreeze;
 	}
 
-	private void ResetCharge() {
+	protected void ResetCharge() {
 		currentCharge = 0;
 	}
 
 	// Get a ratio of Unstability / MaxUnstability
-	private float GetUnstableProgress() {
-		if(unstability < minStability) {
+	protected float GetUnstableProgress() {
+		float actualUnstability = unstability + baseUnstability;
+		if(actualUnstability < minStability) {
 			return 0;
 		} else {
-			return unstability / maxUnstability;
+			return actualUnstability / maxUnstability;
 		}
 	}
 
 	public void DoReload() {
 		currentAmmo += ammoReplenishPerShot;
 		currentAmmo = currentAmmo > maxAmmo? maxAmmo: currentAmmo;
+	}
+
+	// Designed for AI to operate the weapon automatically, with only one function call.
+	public void TryShoot(Transform orgin) {
+		if(HasSufficientAmmo()) {
+			if(freeze != 0) {
+				DoShoot(orgin);
+			}
+		} else {
+			DoReload();
+		}
 	}
 
 	public void DoShoot(Transform origin) {
@@ -117,9 +137,6 @@ public class BaseWeapon : MonoBehaviour
 		} else {
 			ConsumeAmmo(ammoConsumptionPerShot);
 		}
-
-		ResetFreeze();
-		IncreaseUnstability();
 
 		switch(projectileType) {
 			case ProjectileType.RAY: {
@@ -131,6 +148,9 @@ public class BaseWeapon : MonoBehaviour
 				break;
 			}
 		}
+
+		ResetFreeze();
+		IncreaseUnstability();
 	}
 
 	public void DoCharge() {
@@ -145,7 +165,7 @@ public class BaseWeapon : MonoBehaviour
 		}
 	}
 
-	private void DoRaycast(Transform origin) {
+	protected void DoRaycast(Transform origin) {
 		RaycastHit hit;
         Quaternion angleBias = GetFireBiasQuaternion(origin);
         Vector3 emitPosition = origin.position;
@@ -158,17 +178,31 @@ public class BaseWeapon : MonoBehaviour
                 Debug.DrawLine(emitPosition, hit.point, Color.magenta, 2f);
                 GameObject debugHitpointObject = Instantiate(debugHitPointPrefab, hit.point, Quaternion.Euler(Vector3.zero));
                 Destroy(debugHitpointObject, 1.0f);
+
+				// Try to inflict some damage
+				float damage = DamageInflictUtil.DamageLerp(maxDamage, minDamage, 
+					Vector3.Distance(hit.point, origin.position), damageDecayRatio*range, range);
+
+				DamageInflictUtil.InflictDamage(hit, owner.gameObject, damage, inflictForce);
             }
         }
         RenderRay(hit, origin);
 	}
 
-	private void DoCreateProjectile(Transform origin) {
+	protected void DoCreateProjectile(Transform origin) {
+		// Because the weapon fire point and the aiming point wasn't same,
+		// We need to correct its trajectory.
+		Transform weaponFireTransform = weaponEffectPoint.transform;
+		Vector3 correctionVector = weaponFireTransform.InverseTransformVector(origin.position - weaponEffectPoint.position);
+		correctionVector.z = 0;
 
+		GameObject obj = Instantiate(projectilePrefab, weaponEffectPoint.position, origin.rotation);
+		BaseProjectile proj = obj.GetComponent<BaseProjectile>();
+		proj.InitData(this, weaponFireTransform.rotation, correctionVector);
 	}
 
 	// Update line renderer.
-    private void RenderRay(RaycastHit hit, Transform origin) {
+    protected void RenderRay(RaycastHit hit, Transform origin) {
         Vector3 endPoint;
         if(hit.collider != null) {
             endPoint = hit.point;
@@ -183,7 +217,7 @@ public class BaseWeapon : MonoBehaviour
     }
 
 	// Get a random spread shot quaternion when firing.
-	private Quaternion GetFireBiasQuaternion(Transform shootTransform) {
+	protected Quaternion GetFireBiasQuaternion(Transform shootTransform) {
 		float angle = Random.Range(0,360);
 		float progress = GetUnstableProgress();
 		float offset = Random.Range(0, maxSpreadRadius * progress);
@@ -194,24 +228,32 @@ public class BaseWeapon : MonoBehaviour
 		return quat;
 	}
 
-	// Set crosshair max distance whenever a new weapon is equipped.
-	public void ResizeCrossHair() {
-		owner.crossHair.maxScreenRadius = CommonUtil.DistanceProjectionOnCameraScreen(owner.cam, range, maxSpreadRadius);
-	}
-
-	// Change crosshair radius.
-	public void UpdateCrossHairRadius() {
-		owner.crossHair.SetProgressRadius(GetUnstableProgress()-minStability/maxUnstability);
-	}
-
-	private IEnumerator<int> _DisableFireLine() {
+	protected IEnumerator<int> _DisableFireLine() {
 		for(float i=0; i<lineRendererDisplayTime; i+=CommonUtil.GetStepUpdate()) {
 			yield return 0;
 		}
 		lineRenderer.enabled = false;
 	}
 
-	private void UpdateFreeze() {
+	// Set crosshair max distance whenever a new weapon is equipped.
+	// Player Only
+	public void ResizeCrossHair() {
+		if(ownerIsPlayer) {
+			Player player = (Player)owner;
+			player.crossHair.maxScreenRadius = CommonUtil.DistanceProjectionOnCameraScreen(player.cam, range, maxSpreadRadius);
+		}
+	}
+
+	// Change crosshair radius.
+	// Player Only
+	public void UpdateCrossHairRadius() {
+		if(ownerIsPlayer) {
+			Player player = (Player)owner;
+			player.crossHair.SetProgressRadius(GetUnstableProgress()-minStability/maxUnstability);
+		}
+	}
+
+	protected void UpdateFreeze() {
 		if(freeze > 0) {
 			freeze -= CommonUtil.GetStepUpdate();
 		} else {
@@ -219,7 +261,7 @@ public class BaseWeapon : MonoBehaviour
 		}
 	}
 
-	private void UpdateAccuracy() {
+	protected void UpdateAccuracy() {
 		if(unstability > 0) {
 			unstability -= CommonUtil.GetStepUpdate();
 		} else {
@@ -228,14 +270,17 @@ public class BaseWeapon : MonoBehaviour
 	}
 
 	void Awake() {
-		lineRenderer = GetComponent<LineRenderer>();
+		lineRenderer = CommonUtil.GetComponentFromSelfOrChildren<LineRenderer>(this);
 		CommonUtil.IfNullLogError<LineRenderer>(lineRenderer);
+		Debug.Log(lineRenderer);
 		bodyToAimRelative = weaponAimPoint.position - transform.position;
 	}
 
 	void Update() {
 		UpdateFreeze();
 		UpdateAccuracy();
-		UpdateCrossHairRadius();
+		if(ownerIsPlayer) {
+			UpdateCrossHairRadius();
+		}
 	}
 }

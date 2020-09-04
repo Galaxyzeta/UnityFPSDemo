@@ -14,7 +14,7 @@ using UnityEngine.UI;
 //   |____ BaseWeapon
 //   |____ [Animator]
 
-public class Player : MonoBehaviour {
+public class Player : Actor {
 
 	public BaseWeapon weaponData{get; set;}
 	public GameObject weaponPrefab{get; set;}
@@ -43,7 +43,11 @@ public class Player : MonoBehaviour {
 	}
 
 	void Start() {
-		
+		// Register actor
+		ActorManager actorManager = FindObjectOfType<ActorManager>();
+		CommonUtil.IfNullLogError<ActorManager>(actorManager);
+		actorManager.Register(this);
+
 		// Instantiate and weapon count refresh
 		weaponManager.Refresh();
 		// Weapon prefab will be set when equipping.
