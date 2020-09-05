@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using System.Collections.Generic;
 
-// Do not operate position/rotation directly
+// Do not operate position/rotation directly, these works should be done using [Player Motor]
 public class PlayerController : MonoBehaviour
 {
     [Header("Movement")]
@@ -30,6 +30,7 @@ public class PlayerController : MonoBehaviour
     private LineRenderer lineRenderer;
     private BaseWeapon weaponData;
     private CrossHairData crossHair;
+    private AttractionSource attractionSource;
 
     // Fov
     private float defaultFov;
@@ -47,7 +48,7 @@ public class PlayerController : MonoBehaviour
     private float maxBobbingCoolDown = 60;  // Stop bobbing if you started firing. After certain amount of time, you can start bobbing again.
     private float recoil = 0;   // Camera goes up when firing.
     private float weaponBackRecoil = 0;     // Weapon goes backward when firing.
-    private bool hasFired = false;  // Has fired in this frame.
+    private bool hasFiredThisFrame = false;  // Has fired in this frame.
     private bool hasReloadCancelled = false;   // Has [actually] fired when reloading, causing a reload to fail. EG: Shotgun fire.
     private bool isReloading = false;   // Reload lock, prevent multiple reloading coroutines operating at same time.
     private bool isSwapping = false;    // All action's lock.
@@ -132,9 +133,13 @@ public class PlayerController : MonoBehaviour
                 isJumpPressed && !isAir && currentJumpCount-- > 0 && lastTimeJumped + jumpPreventionTime < Time.time;
 
             if(jumpAvailableCondition) {
+                // Jump OK
                 isAir = true;
                 lastTimeJumped = Time.time;
                 motor.ApplyJumpForce(jumpForce);
+
+                // Handle noise
+                attractionSource.MakeNoise(50f, 50f);   // Noise strength 50, decay 50 unit per second
             }
         }
 
@@ -186,6 +191,9 @@ public class PlayerController : MonoBehaviour
                 }
             }
         }
+
+        // Handle produced noise
+        attractionSource.MakeNoise(currentSpeed/(sprintSpeedMultiplier*walkSpeed)*100f, 50f);
         
         // Apply movement accordingly
         Vector3 resultVelocity = resultVector * currentSpeed;
@@ -216,7 +224,7 @@ public class PlayerController : MonoBehaviour
 
     // Recoil perform
     private void HandleRecoil() {
-        if(hasFired) {
+        if(hasFiredThisFrame) {
             // Recoil differs according to shooting state.
             if(IsAiming()) {
                 recoil += weaponData.aimedRecoilCoef;
@@ -363,9 +371,15 @@ public class PlayerController : MonoBehaviour
 
         // Is trying to fire
         if(isInputValid) {
+            
             if(CanTryShoot()) {
                 TryShoot();
             }
+            /*
+            weaponData.TryShoot(cam.transform);
+            CancelBobbing();
+            hasFiredThisFrame = true;
+            */
         } else {
             // Is charging
             if(weaponData.fireType == BaseWeapon.FireType.CHARGE && InputHandler.FireKeyHeld()) {
@@ -391,7 +405,7 @@ public class PlayerController : MonoBehaviour
         weaponData.DoShoot(cam.transform);
         // Stop bobbing when firing.
         CancelBobbing();
-        hasFired = true;
+        hasFiredThisFrame = true;
     }
 
     public void TryReload() {
@@ -417,7 +431,7 @@ public class PlayerController : MonoBehaviour
     // Reload countdown helper
     private IEnumerator<int> _ReloadCountDown() {
 
-        for(float i=0; i<weaponData.reloadTime; i+=CommonUtil.GetStepUpdate()) {
+        for(float i=0; i<weaponData.maxReloadTime; i+=CommonUtil.GetStepUpdate()) {
             if(hasReloadCancelled) {
                 isReloading = false;
                 yield break;
@@ -436,7 +450,7 @@ public class PlayerController : MonoBehaviour
 
     // Reset all state variables to their defaults.
     private void InitBeforeUpdate() {
-        hasFired = false;
+        hasFiredThisFrame = false;
         hasReloadCancelled = false;
         weaponData = player.weaponData;
         crossHair = player.crossHair;
@@ -450,7 +464,7 @@ public class PlayerController : MonoBehaviour
         // Whether reloading animation should be played or not
         player.controller.IsReloading(isReloading);
         // Whether to reset animation to idle or not:
-        if(hasFired || IsAiming()) {
+        if(hasFiredThisFrame || IsAiming()) {
             player.controller.TriggerReset();
         }
         // @Improve @WIP
@@ -461,7 +475,7 @@ public class PlayerController : MonoBehaviour
         }
         // Set weapon reloading animation speed. (1.0 x multiplier)
         if(clipLength != 0) {
-            player.controller.FloatMultReloading(clipLength / weaponData.reloadTime * CommonUtil.FPS);
+            player.controller.FloatMultReloading(clipLength / weaponData.maxReloadTime * CommonUtil.FPS);
         }
 
     }
@@ -476,6 +490,11 @@ public class PlayerController : MonoBehaviour
 
         weaponManager = player.GetComponent<PlayerWeaponManager>();
 		CommonUtil.IfNullLogError<PlayerWeaponManager>(weaponManager);
+
+        attractionSource = player.GetComponent<AttractionSource>();
+        if (!attractionSource) {
+            attractionSource = gameObject.AddComponent<AttractionSource>();
+        }
     }
     // Start is called before the first frame update
     void Start() {

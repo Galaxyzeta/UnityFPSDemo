@@ -18,7 +18,8 @@ public class CommonUtil : MonoBehaviour {
 	// Compare Ex1 and Ex2, filling the same guage took same time.
 
 	
-	public static readonly float FPS = 60;
+	public static readonly float FPS = 60f;
+	public static readonly float NOISE_DECAY_RATIO = 10f;	// Noise volume decay 10 units for every 1f distance.
 	public static float GetStepUpdate() {
 		return FPS * Time.deltaTime;
 	}
@@ -56,5 +57,17 @@ public class CommonUtil : MonoBehaviour {
 			component = gameObject.GetComponentInChildren<T>();
 			return component;
 		}
+	}
+
+	public static float CalcNoiseAfterDecay(float sourceVolume, float distance) {
+		float tmp = sourceVolume - distance * NOISE_DECAY_RATIO;
+		return tmp > 0? tmp: 0;
+	}
+
+	public static float CalcNoiseThresholdRadius(float sourceVolume, float threshold) {
+		if (sourceVolume > threshold) {
+			return (sourceVolume - threshold) / NOISE_DECAY_RATIO;
+		}
+		return 0;
 	}
 }

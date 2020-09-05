@@ -30,7 +30,7 @@ public class BaseWeapon : MonoBehaviour
 	public float projectileFlyingSpeed = 5f;
 
 	[Header("Ammo")]
-	public float reloadTime = 60;
+	public float maxReloadTime = 60;
 	public float currentAmmo = 20;
 	public float maxAmmo = 20;
 	public float ammoConsumptionPerShot = 1;
@@ -80,6 +80,9 @@ public class BaseWeapon : MonoBehaviour
 	public float baseUnstability {get; set;}
 	public float currentCharge {get;set;} = 0;
 	public bool ownerIsPlayer = false;
+	public float reloadTime {get; private set;}
+	public bool isReloading {get; private set;}
+	public AttractionSource attractionSource {get; private set;}
 
 	public bool HasSufficientAmmo() {
 		return currentAmmo >= ammoConsumptionPerShot;
@@ -120,14 +123,28 @@ public class BaseWeapon : MonoBehaviour
 	}
 
 	// Designed for AI to operate the weapon automatically, with only one function call.
-	public void TryShoot(Transform orgin) {
+	// Return whether the fire was success.
+	public bool TryShoot(Transform orgin) {
 		if(HasSufficientAmmo()) {
-			if(freeze != 0) {
+			if(freeze == 0) {
+				Debug.Log("Shoot");
 				DoShoot(orgin);
+				return true;
 			}
 		} else {
-			DoReload();
+			// Start reloading...
+			if(reloadTime != maxReloadTime && isReloading == false) {
+				Debug.Log("Start to reload....");
+				reloadTime = maxReloadTime;
+				isReloading = true;
+			} else if(reloadTime == 0) {
+				// Reloading OK.
+				Debug.Log("Reload OK");
+				isReloading = false;
+				DoReload();
+			}
 		}
+		return false;
 	}
 
 	public void DoShoot(Transform origin) {
@@ -151,6 +168,9 @@ public class BaseWeapon : MonoBehaviour
 
 		ResetFreeze();
 		IncreaseUnstability();
+
+		// Handle noise
+		attractionSource.MakeNoise(50f, 25f);
 	}
 
 	public void DoCharge() {
@@ -176,8 +196,9 @@ public class BaseWeapon : MonoBehaviour
             Debug.DrawRay(emitPosition, towardsDirection, Color.red, 2f);
             if(hit.collider != null) {
                 Debug.DrawLine(emitPosition, hit.point, Color.magenta, 2f);
-                GameObject debugHitpointObject = Instantiate(debugHitPointPrefab, hit.point, Quaternion.Euler(Vector3.zero));
-                Destroy(debugHitpointObject, 1.0f);
+				// === Debug only ===
+                // GameObject debugHitpointObject = Instantiate(debugHitPointPrefab, hit.point, Quaternion.Euler(Vector3.zero));
+                // Destroy(debugHitpointObject, 1.0f);
 
 				// Try to inflict some damage
 				float damage = DamageInflictUtil.DamageLerp(maxDamage, minDamage, 
@@ -269,16 +290,31 @@ public class BaseWeapon : MonoBehaviour
 		}
 	}
 
+	protected void UpdateReload() {
+		if(reloadTime > 0) {
+			reloadTime -= CommonUtil.GetStepUpdate();
+		} else {
+			reloadTime = 0;
+		}
+	}
+
 	void Awake() {
 		lineRenderer = CommonUtil.GetComponentFromSelfOrChildren<LineRenderer>(this);
 		CommonUtil.IfNullLogError<LineRenderer>(lineRenderer);
-		Debug.Log(lineRenderer);
+		
+		// Make attraction. AI use this to check attraction point.
+		attractionSource = GetComponent<AttractionSource>();
+		if(!attractionSource) {
+			attractionSource = gameObject.AddComponent<AttractionSource>();
+		}
+
 		bodyToAimRelative = weaponAimPoint.position - transform.position;
 	}
 
 	void Update() {
 		UpdateFreeze();
 		UpdateAccuracy();
+		UpdateReload();
 		if(ownerIsPlayer) {
 			UpdateCrossHairRadius();
 		}

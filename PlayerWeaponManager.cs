@@ -45,6 +45,7 @@ public class PlayerWeaponManager : MonoBehaviour {
 			player.weaponData = baseWeapon;
 			
 			baseWeapon.owner = player;
+			baseWeapon.ownerIsPlayer = true;
 			baseWeapon.ResizeCrossHair();
 			// Init weapon's place.
 			baseWeapon.transform.position = player.GetComponent<PlayerMotor>().globalDefaultPoint.position;
