@@ -94,6 +94,10 @@ public class PlayerController : MonoBehaviour
         return aimingProgress > 0;
     }
 
+    private void MakeNoise(float volume) {
+        attractionSource.AddNoise(volume);
+    }
+
     private void HandlePlayerMovement() {
         float unstabilityModify = 0;
 		PlayerJump(ref unstabilityModify);
@@ -139,7 +143,7 @@ public class PlayerController : MonoBehaviour
                 motor.ApplyJumpForce(jumpForce);
 
                 // Handle noise
-                attractionSource.MakeNoise(50f, 50f);   // Noise strength 50, decay 50 unit per second
+                MakeNoise(100f);   // Noise strength 50, decay 50 unit per second
             }
         }
 
@@ -147,7 +151,6 @@ public class PlayerController : MonoBehaviour
             // @Warning : Loosely designed, magic number
             unstabilityModify += 20;
         }
-
     }
 
     private void PlayerMove(ref float unstabilityModify) {
@@ -192,8 +195,10 @@ public class PlayerController : MonoBehaviour
             }
         }
 
-        // Handle produced noise
-        attractionSource.MakeNoise(currentSpeed/(sprintSpeedMultiplier*walkSpeed)*100f, 50f);
+        // Handle walking noise
+        if(resultVector != Vector3.zero) {
+            MakeNoise(currentSpeed/(sprintSpeedMultiplier*walkSpeed)*30f);
+        }
         
         // Apply movement accordingly
         Vector3 resultVelocity = resultVector * currentSpeed;
@@ -491,10 +496,8 @@ public class PlayerController : MonoBehaviour
         weaponManager = player.GetComponent<PlayerWeaponManager>();
 		CommonUtil.IfNullLogError<PlayerWeaponManager>(weaponManager);
 
-        attractionSource = player.GetComponent<AttractionSource>();
-        if (!attractionSource) {
-            attractionSource = gameObject.AddComponent<AttractionSource>();
-        }
+        attractionSource = gameObject.AddComponent<AttractionSource>();
+		AttractionSourceManager.Register(attractionSource);
     }
     // Start is called before the first frame update
     void Start() {

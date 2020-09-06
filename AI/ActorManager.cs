@@ -3,17 +3,18 @@ using System.Collections;
 using System.Collections.Generic;
 
 public class ActorManager : MonoBehaviour {
-	public List<Actor> actors {get; set;}
+	public static List<Actor> actors {get; set;} = new List<Actor>();
 
-	void Awake() {
-		actors = new List<Actor>();
-	}
-
-	public void Register(Actor actor) {
+	public static void Register(Actor actor) {
+		Debug.Log(actor);
 		actors.Add(actor);
 	}
 
-	public Actor[] GetHostile(int myTeam) {
+	public static void Unregister(Actor actor) {
+		actors.Remove(actor);
+	}
+
+	public static Actor[] GetHostile(int myTeam) {
 		List<Actor> hostileTargets = new List<Actor>(); 
 		foreach (Actor actor in actors) {
 			if (actor.team != myTeam) {

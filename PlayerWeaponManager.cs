@@ -6,7 +6,7 @@ public class PlayerWeaponManager : MonoBehaviour {
 	public Player player {get; private set;}
 
 	public GameObject[] weaponBag;		// [GameObject] means WeaponPrefab here, [BaseWeapon] must be attached to it.
-	public int maxWeapons;
+	public int maxWeapons = 3;
 	private int currentLength = 0;
 
 	private int weaponCurrent = -1;
@@ -15,9 +15,20 @@ public class PlayerWeaponManager : MonoBehaviour {
 		if(currentLength >= maxWeapons) {
 			return false;
 		} else {
-			weaponBag[currentLength++] = weaponPrefab;
+			InitNewWeapon(weaponPrefab, currentLength);
+			currentLength ++;
 			return true;
 		}
+	}
+
+	private void InitNewWeapon(GameObject weaponPrefab, int emptyPos) {
+		weaponBag[emptyPos] = Instantiate(weaponPrefab);
+		// Let the weapon move with cam
+		weaponBag[emptyPos].transform.parent = player.cam.transform;
+		// Make child collider useless
+		ToggleChildColliders(weaponBag[emptyPos], false);
+		// Deactive unequipped weapons
+		weaponBag[emptyPos].SetActive(false);
 	}
 
 	public bool IsEmpty() {
@@ -95,13 +106,7 @@ public class PlayerWeaponManager : MonoBehaviour {
 			if(weaponBag[i] == null) {
 				break;
 			}
-			weaponBag[i] = Instantiate(weaponBag[i]);
-			// Let the weapon move with cam
-			weaponBag[i].transform.parent = player.cam.transform;
-			// Make child collider useless
-			ToggleChildColliders(weaponBag[i], false);
-			// Deactive unequipped weapons
-			weaponBag[i].SetActive(false);
+			InitNewWeapon(weaponBag[i], i);
 		}
 		this.currentLength = i;
 	}

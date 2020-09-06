@@ -83,6 +83,7 @@ public class BaseWeapon : MonoBehaviour
 	public float reloadTime {get; private set;}
 	public bool isReloading {get; private set;}
 	public AttractionSource attractionSource {get; private set;}
+	private AttractionSourceManager attractionSourceManager; 
 
 	public bool HasSufficientAmmo() {
 		return currentAmmo >= ammoConsumptionPerShot;
@@ -170,7 +171,7 @@ public class BaseWeapon : MonoBehaviour
 		IncreaseUnstability();
 
 		// Handle noise
-		attractionSource.MakeNoise(50f, 25f);
+		attractionSource.AddNoise(100f);
 	}
 
 	public void DoCharge() {
@@ -301,12 +302,10 @@ public class BaseWeapon : MonoBehaviour
 	void Awake() {
 		lineRenderer = CommonUtil.GetComponentFromSelfOrChildren<LineRenderer>(this);
 		CommonUtil.IfNullLogError<LineRenderer>(lineRenderer);
-		
+
 		// Make attraction. AI use this to check attraction point.
-		attractionSource = GetComponent<AttractionSource>();
-		if(!attractionSource) {
-			attractionSource = gameObject.AddComponent<AttractionSource>();
-		}
+		attractionSource = gameObject.AddComponent<AttractionSource>();
+		AttractionSourceManager.Register(attractionSource);
 
 		bodyToAimRelative = weaponAimPoint.position - transform.position;
 	}

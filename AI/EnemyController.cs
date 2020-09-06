@@ -34,13 +34,12 @@ public class EnemyController : AbstractEnemyController {
 	[Tooltip("What target to hit.")]
 	public LayerMask detectMask;
 	[Tooltip("Noise alert threshold")]
-	public float noiseDetectThreshold = 50f;
+	public float noiseDetectThreshold = 10f;
 
 	public PatrolPath patrolPath {get; set;}
 	public NavMeshAgent navMeshAgent {get; set;}
 	private BaseWeapon weaponData;
 	private State state;
-	private ActorManager actorManager;
 	private float lastThinkTime = 0;	// The last time before AI started to change strategy
 	private State nextState;
 	private Actor lockedTarget;
@@ -54,95 +53,83 @@ public class EnemyController : AbstractEnemyController {
 		ATTACK, PATROL, TRANSITION
 	}
 
-	// @Warninig: lossy design! 
+	// @Warning: lossy design! 
 	private void Attack() {
 		// Target might change.
 		Actor target = FindNearestVisibleHostile();
+
 		if(target != null) {
 			lockedTarget = target;
-		}
-
-		float distance = Vector3.Distance(transform.position, lockedTarget.transform.position);
-		if(distance > maxAttackRange) {
-			// === Chase ===
-			navMeshAgent.isStopped = false;
-			navMeshAgent.SetDestination(lockedTarget.transform.position);
+			isTargetLost = false;
 		} else {
-			// === Try Attack ===
+			isTargetLost = true;
+		}
+		/*
+		if(lockedTarget == null) {
+			navMeshAgent.SetDestination(lastKnownPosition);
+			return;
+		}
+		*/
+		// === Target insight === 
+		if (isTargetLost == false) {
+
+			// Face towards target
 			navMeshAgent.updateRotation = false;
+			OrientTowardsTarget(lockedTarget);
 
-			// === Target insight === 
-			if (isTargetLost == false) {
-
-				// Face towards target
-				navMeshAgent.updateRotation = false;
-				OrientTowardsTarget(lockedTarget);
-
-				if(!IsRaycastTestValid(lockedTarget)) {
-					// Target already lost
-					Debug.Log("Target lost");
-					isTargetLost = true;
-					lastKnownPosition = lockedTarget.transform.position;
-					lastTargetLostTime = Time.time;
-				} else {
-					// Target not lost
-					// Already in attack angle.
-					if(angleToTarget < attackAngle) {
-						if(distanceToTarget < minAttackRange) {
-							// Too close, move back.
-							Debug.Log("Move back");
-							navMeshAgent.isStopped = false;
-							navMeshAgent.SetDestination(transform.position + -transform.forward * stepBackAmount);
-						} else if (distanceToTarget > maxAttackRange) {
-							// Too far, move close. Walk backward without automatic rotation.
-							Debug.Log("Move forward");
-							navMeshAgent.isStopped = false;
-							navMeshAgent.SetDestination(lockedTarget.transform.position);
-						} else {
-							// Start to attack
-							Debug.Log("Attack");
-							navMeshAgent.isStopped = true;
-							shootTransform.rotation = Quaternion.LookRotation(lockedTarget.transform.position - transform.position);
-							weaponData.TryShoot(shootTransform);
-						}
-					}
-				}
+			if(!IsVisible(lockedTarget)) {
+				// Target already lost
+				isTargetLost = true;
+				lastKnownPosition = lockedTarget.transform.position;
+				lastTargetLostTime = Time.time;
 			} else {
-				navMeshAgent.updateRotation = true;
-				navMeshAgent.isStopped = false;
-				Debug.Log("Target lost");
-				// === Target lost ===
-				// Target appeared again.
-				if(IsRaycastTestValid(lockedTarget)) {
-					Debug.Log("Target appeared");
-					isTargetLost = false;
-				} else {
-					
-					// Find some evidence
-					AttractionSource source = FindNearestAttraction();
-					if(source != null) {
-						// Detected noise
-						Debug.Log("Found noise");
-						lastKnownPosition = source.transform.position;
-						lastTargetLostTime = Time.time;
-
-						navMeshAgent.SetDestination(lastKnownPosition);
+				// Target not lost
+				// Already in attack angle.
+				if(angleToTarget < attackAngle) {
+					if(distanceToTarget < minAttackRange) {
+						// Too close, move back.
+						navMeshAgent.isStopped = false;
+						navMeshAgent.SetDestination(transform.position + -transform.forward * stepBackAmount);
+					} else if (distanceToTarget > maxAttackRange) {
+						// Too far, move close. Walk backward without automatic rotation.
+						navMeshAgent.isStopped = false;
+						navMeshAgent.SetDestination(lockedTarget.transform.position);
 					} else {
-						// No evidence found
-						
-						// If target has not appeared for a long time, translate state into [ALERT]
-						if (Time.time - lastTargetLostTime > maxTargetLostTime) {
-							Debug.Log("Target lost. Goto [PATROL] mode.");
-							lockedTarget = null;
-							StartTransitionTo(State.PATROL);
-							navMeshAgent.SetDestination(patrolPath.GetNextTransform().position);
-						} else {
-							navMeshAgent.SetDestination(lastKnownPosition);
-						}
+						// Start to attack
+						navMeshAgent.isStopped = true;
+						shootTransform.rotation = Quaternion.LookRotation(lockedTarget.transform.position - transform.position);
+						weaponData.TryShoot(shootTransform);
 					}
 				}
 			}
+		} else {
+			// === Target lost ===
+			lockedTarget = null;
+			navMeshAgent.updateRotation = true;
+			navMeshAgent.isStopped = false;
+			
+			// Find some evidence
+			AttractionSource source = FindNearestAttraction();
+			if(source != null) {
+				// Detected noise
+				Debug.Log(source);
+				lastKnownPosition = source.transform.position;
+				lastTargetLostTime = Time.time;
+				navMeshAgent.SetDestination(lastKnownPosition);
+			} else {
+				// @Warning: lossy design -- cause robot to do nothing !
+				// No evidence found
+				// If target has not appeared for a long time, translate state into [ALERT]
+				if (Time.time - lastTargetLostTime > maxTargetLostTime) {
+					lockedTarget = null;
+					StartTransitionTo(State.PATROL);
+					navMeshAgent.SetDestination(patrolPath.GetNextTransform().position);
+				} else {
+					navMeshAgent.SetDestination(lastKnownPosition);
+				}
+			}
 		}
+
 	}
 
 	private void StartTransitionTo(State nextState) {
@@ -158,7 +145,6 @@ public class EnemyController : AbstractEnemyController {
 		}
 	}
 
-	// @Warninig: lossy design! 
 	private void Patrol() {
 		// === Patrol ===
 		if(patrolEnabled == true) {
@@ -177,9 +163,8 @@ public class EnemyController : AbstractEnemyController {
 		// === Find Suspecious Point ===
 		AttractionSource source = FindNearestAttraction();
 		if(source != null) {
+			Debug.Log(source);
 			lastKnownPosition = source.transform.position;
-			// @Warninig: lossy design! 
-			lockedTarget = source.GetComponent<Actor>();
 			navMeshAgent.SetDestination(lastKnownPosition);
 			StartTransitionTo(State.ATTACK);
 		}
@@ -187,24 +172,21 @@ public class EnemyController : AbstractEnemyController {
 	}
 
 	private AttractionSource FindNearestAttraction() {
-	
-		AttractionSource source, tgt = null;
+		AttractionSource tgt = null;
 		float distance, actualNoiseVolume;
 		float cmp = float.MaxValue;
 		// Traverse each actor to get its [AttractionSource]
-		foreach(Actor actor in actorManager.actors) {
-			source = actor.GetComponent<AttractionSource>();
+		foreach(AttractionSource src in AttractionSourceManager.attractionSources) {
 			// Find loudest noise source position.
-			if(source != null) {
-				distance = Vector3.Distance(source.transform.position, transform.position);
-				actualNoiseVolume = CommonUtil.CalcNoiseAfterDecay(source.currentAttraction, distance);
+			if(src != null) {
+				distance = Vector3.Distance(src.transform.position, transform.position);
+				actualNoiseVolume = CommonUtil.CalcNoiseAfterDecay(src.currentAttraction, distance);
 				if(actualNoiseVolume > noiseDetectThreshold && actualNoiseVolume < cmp) {
 					cmp = actualNoiseVolume;
-					tgt = source;
+					tgt = src;
 				}
 			}
 		}
-
 		return tgt;
 	}
 
@@ -218,7 +200,7 @@ public class EnemyController : AbstractEnemyController {
 		float tmpDistance;
 		float distance = float.MaxValue;
 		Actor target = null;
-		foreach(Actor actor in actorManager.actors) {
+		foreach(Actor actor in ActorManager.actors) {
 			if(actor.team != this.team && IsVisible(actor)) {
 				tmpDistance = Vector3.Distance(actor.transform.position, transform.position);
 				if(tmpDistance < distance) {
@@ -260,12 +242,14 @@ public class EnemyController : AbstractEnemyController {
 			return IsRaycastTestValid(target);
 		}
 	}
-	
-	void Start() {
-		// AM init
-		actorManager = FindObjectOfType<ActorManager>();
-		CommonUtil.IfNullLogError<ActorManager>(actorManager);
-		actorManager.Register(this);
+
+	private void OnHit() {
+		StartTransitionTo(State.ATTACK);
+	}
+
+	protected void Start() {
+		// Actor reg
+		ActorManager.Register(this);
 		// Nav init
 		navMeshAgent = FindObjectOfType<NavMeshAgent>();
 		CommonUtil.IfNullLogError<NavMeshAgent>(navMeshAgent);

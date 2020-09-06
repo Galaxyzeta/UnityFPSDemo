@@ -19,14 +19,14 @@ public class CommonUtil : MonoBehaviour {
 
 	
 	public static readonly float FPS = 60f;
-	public static readonly float NOISE_DECAY_RATIO = 10f;	// Noise volume decay 10 units for every 1f distance.
+	public static readonly float NOISE_DECAY_RATIO = 5f;	// Noise volume decay 10 units for every 1f distance.
 	public static float GetStepUpdate() {
 		return FPS * Time.deltaTime;
 	}
 
 	public static void IfNullLogError <T>(T obj) {
 		if(obj == null) {
-			Debug.LogError(string.Format("[%s] Can't be null !", obj.ToString()));
+			Debug.LogError(obj.GetType()+"is null !");
 		}
 	}
 

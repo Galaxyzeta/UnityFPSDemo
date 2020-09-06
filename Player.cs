@@ -20,11 +20,10 @@ public class Player : Actor {
 	public GameObject weaponPrefab{get; set;}
 	public CrossHairData crossHair{get; private set;}
 	public Camera cam;
-	[Tooltip("The root that controls all sub anchors. Attach animation controller here to perform anims properly.")]
 	public GameObject anchor;
 	public Health health{get; private set;}
 	public BaseWeaponAnimationController controller{get; set;}
-	private PlayerWeaponManager weaponManager;
+	public PlayerWeaponManager weaponManager{get; private set;}
 
 	public void ChangeAnimatorOnAnchor(Animator animator) {
 		Animator existedAnimator = anchor.GetComponent<Animator>();
@@ -35,18 +34,17 @@ public class Player : Actor {
 		return weaponData.GetComponent<Animator>();
 	}
 
-	void Awake() {
+	protected void Awake() {
 		health = GetComponent<Health>();
 		weaponManager = GetComponent<PlayerWeaponManager>();
 		crossHair = GetComponent<CrossHairData>();
 		
 	}
 
-	void Start() {
+	protected void Start() {
+
 		// Register actor
-		ActorManager actorManager = FindObjectOfType<ActorManager>();
-		CommonUtil.IfNullLogError<ActorManager>(actorManager);
-		actorManager.Register(this);
+		ActorManager.Register(this);
 
 		// Instantiate and weapon count refresh
 		weaponManager.Refresh();
