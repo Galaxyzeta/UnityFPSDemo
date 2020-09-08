@@ -7,19 +7,17 @@ public abstract class Pickable : MonoBehaviour {
 
 
 	protected virtual void Start() {
-		// Remove all colliders
+		// Remove all children colliders
 		Collider[] allColliders = GetComponentsInChildren<Collider>();
 		foreach(Collider collider in allColliders) {
-			collider.enabled = false;
+			if(collider.isTrigger == false) {
+				collider.enabled = false;
+			}
 		}
 	}
 
-	protected virtual void FixedUpdate() {
-		RaycastHit hit;
-		if (Physics.SphereCast(transform.position, pickupRadius, Vector3.up, out hit, pickupRadius, pickupMask)) {
-			Debug.Log("OK2");
-			OnPick(hit.collider.gameObject);
-		}
+	protected virtual void OnTriggerEnter(Collider collider) {
+		OnPick(collider.gameObject);
 	}
 
 	protected abstract void OnPick(GameObject obj);

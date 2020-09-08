@@ -46,8 +46,9 @@ public class Player : Actor {
 		// Register actor
 		ActorManager.Register(this);
 
-		// Instantiate and weapon count refresh
-		weaponManager.Refresh();
+		// Instantiate all weapon prefab definitions.
+		// Should only be called ONCE!
+		weaponManager.Init();
 		// Weapon prefab will be set when equipping.
 		weaponManager.EquipWeapon(0);
 

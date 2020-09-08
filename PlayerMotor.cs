@@ -163,7 +163,9 @@ public class PlayerMotor : MonoBehaviour {
 		cam.transform.rotation *= camOffsetRotation;
 
 		// Weapon position: using localposition is much more easier!
-		weaponPrefab.transform.localPosition = this.weaponlocalPositionOffset;
+		if(weaponPrefab) {
+			weaponPrefab.transform.localPosition = this.weaponlocalPositionOffset;
+		}
 
 		ResetUpdateCache();
 		

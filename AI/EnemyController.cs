@@ -35,19 +35,38 @@ public class EnemyController : AbstractEnemyController {
 	public LayerMask detectMask;
 	[Tooltip("Noise alert threshold")]
 	public float noiseDetectThreshold = 10f;
-
+	[Tooltip("Within how much distance determine the object has reached the goal")]
+	public float targetReachThreshold = 0.2f;
+	[Tooltip("If has reached last known, in how much distance will the object continue to search? ")]
+	public float maxSearchRange = 3f;
+	public float minSearchRange = 1f;
+	[Tooltip("If has reached last known, how many failed destination pick can the object tolerate?")]
+	public int maxRandomPointTry = 10;
+	[Tooltip("The possibility of an AI to shoot correctly")]
+	public float shootingAccuracy = 0.5f;		// Half possibility that an AI shoot correctly.
+	[Tooltip("When performing an inaccurate shoot, how much angle bias will be tolerated")]
+	public float biasAngle = 50f;
+	
 	public PatrolPath patrolPath {get; set;}
 	public NavMeshAgent navMeshAgent {get; set;}
 	private BaseWeapon weaponData;
 	private State state;
-	private float lastThinkTime = 0;	// The last time before AI started to change strategy
+	private float lastThinkTime = 0;	// Used to make AI stupid, laggy.
 	private State nextState;
 	private Actor lockedTarget;
+
+	// Calculated properties
 	public float angleToTarget {get; set;}
 	public float distanceToTarget {get; set;}
+
+	// Last known point
 	private Vector3 lastKnownPosition;
 	private float lastTargetLostTime;
 	private bool isTargetLost = false;
+
+	// Sentinel random rotation
+	private Quaternion randomQuaternion;
+	private float lastRandomDecisionTime;
 
 	public enum State {
 		ATTACK, PATROL, TRANSITION
@@ -55,33 +74,26 @@ public class EnemyController : AbstractEnemyController {
 
 	// @Warning: lossy design! 
 	private void Attack() {
-		// Target might change.
-		Actor target = FindNearestVisibleHostile();
-
-		if(target != null) {
-			lockedTarget = target;
-			isTargetLost = false;
-		} else {
-			isTargetLost = true;
-		}
-		/*
-		if(lockedTarget == null) {
-			navMeshAgent.SetDestination(lastKnownPosition);
-			return;
-		}
-		*/
+		
 		// === Target insight === 
 		if (isTargetLost == false) {
+			// Do possible retarget
+			/*
+			Actor target = FindNearestVisibleHostile();
+			if(target != null) {
+				lockedTarget = target;
+			}
+			*/
 
 			// Face towards target
 			navMeshAgent.updateRotation = false;
+
 			OrientTowardsTarget(lockedTarget);
 
 			if(!IsVisible(lockedTarget)) {
 				// Target already lost
-				isTargetLost = true;
-				lastKnownPosition = lockedTarget.transform.position;
-				lastTargetLostTime = Time.time;
+				Debug.Log("Lost");
+				TargetLostAtPosition(lockedTarget.transform.position);
 			} else {
 				// Target not lost
 				// Already in attack angle.
@@ -98,7 +110,18 @@ public class EnemyController : AbstractEnemyController {
 						// Start to attack
 						navMeshAgent.isStopped = true;
 						shootTransform.rotation = Quaternion.LookRotation(lockedTarget.transform.position - transform.position);
-						weaponData.TryShoot(shootTransform);
+						// Randomize shooting to make AI stupid and inaccurate.
+						if (Random.Range(0f, 1f) < shootingAccuracy) {
+							weaponData.TryShoot(shootTransform);
+						} else {
+							// Inaccurate fire, has a big possibility to miss.
+							float yBiasAngle = Random.Range(-biasAngle,biasAngle);
+							float zBiasAngle = Random.Range(-biasAngle,biasAngle);
+							Quaternion originalRotation = shootTransform.rotation;
+							shootTransform.rotation = Quaternion.Euler(0, yBiasAngle, zBiasAngle) * shootTransform.rotation;
+							weaponData.TryShoot(shootTransform);
+							shootTransform.rotation = originalRotation;
+						}
 					}
 				}
 			}
@@ -107,29 +130,45 @@ public class EnemyController : AbstractEnemyController {
 			lockedTarget = null;
 			navMeshAgent.updateRotation = true;
 			navMeshAgent.isStopped = false;
-			
-			// Find some evidence
-			AttractionSource source = FindNearestAttraction();
-			if(source != null) {
-				// Detected noise
-				Debug.Log(source);
-				lastKnownPosition = source.transform.position;
-				lastTargetLostTime = Time.time;
-				navMeshAgent.SetDestination(lastKnownPosition);
+
+			// Do target find
+			// Target might change.
+			Actor target = FindNearestVisibleHostile();
+			if(target != null) {
+				lockedTarget = target;
+				isTargetLost = false;
 			} else {
-				// @Warning: lossy design -- cause robot to do nothing !
-				// No evidence found
-				// If target has not appeared for a long time, translate state into [ALERT]
-				if (Time.time - lastTargetLostTime > maxTargetLostTime) {
-					lockedTarget = null;
-					StartTransitionTo(State.PATROL);
-					navMeshAgent.SetDestination(patrolPath.GetNextTransform().position);
+				// No visible target. Find some evidence
+				AttractionSource source = FindNearestAttraction();
+				if(source != null) {
+					// Detected noise
+					Debug.Log(source);
+					TargetLostAtPosition(source.transform.position);
 				} else {
-					navMeshAgent.SetDestination(lastKnownPosition);
+					// Go to target
+					if(Vector3.Distance(transform.position, lastKnownPosition) > targetReachThreshold) {
+						navMeshAgent.SetDestination(lastKnownPosition);
+					} else {
+						// Already reached destination, but still no evidence.
+						if (Time.time - lastTargetLostTime > maxTargetLostTime) {
+							StartTransitionTo(State.PATROL);
+							navMeshAgent.SetDestination(patrolPath.GetNextTransform().position);
+						} else {
+							// Do random orientation
+							if(lastThinkTime + 2f < Time.time) {
+								lastThinkTime = Time.time;
+								randomQuaternion = Quaternion.Euler(0, Random.Range(90, 180)*(Random.Range(0,2)==0?-1:1) ,0) * transform.rotation;
+							} else {
+								OrientTowardsQuaternion(randomQuaternion);
+							}
+						}
+					}
 				}
 			}
 		}
 
+		// Debug
+		Debug.DrawLine(transform.position, lastKnownPosition, Color.blue);
 	}
 
 	private void StartTransitionTo(State nextState) {
@@ -159,16 +198,22 @@ public class EnemyController : AbstractEnemyController {
 		if(target != null) {
 			lockedTarget = target;
 			StartTransitionTo(State.ATTACK);
+		} else {
+			// === Find Suspecious Point ===
+			AttractionSource source = FindNearestAttraction();
+			if(source != null) {
+				Debug.Log(source);
+				TargetLostAtPosition(source.transform.position);
+				StartTransitionTo(State.ATTACK);
+			}
 		}
-		// === Find Suspecious Point ===
-		AttractionSource source = FindNearestAttraction();
-		if(source != null) {
-			Debug.Log(source);
-			lastKnownPosition = source.transform.position;
-			navMeshAgent.SetDestination(lastKnownPosition);
-			StartTransitionTo(State.ATTACK);
-		}
-						
+	}
+
+	private void TargetLostAtPosition(Vector3 lastknown) {
+		lastKnownPosition = lastknown;
+		isTargetLost = true;
+		lastTargetLostTime = Time.time;
+		navMeshAgent.SetDestination(lastknown);
 	}
 
 	private AttractionSource FindNearestAttraction() {
@@ -194,6 +239,10 @@ public class EnemyController : AbstractEnemyController {
 		float angle = Vector3.SignedAngle(transform.forward, transform.position - target.transform.position, -transform.up);
 		Quaternion targetQuaternion = transform.rotation * Quaternion.Euler(0f, angle, 0f);
 		transform.rotation = Quaternion.RotateTowards(transform.rotation, targetQuaternion, navMeshAgent.angularSpeed * Time.fixedDeltaTime);
+	}
+
+	private void OrientTowardsQuaternion(Quaternion quaternion) {
+		transform.rotation = Quaternion.RotateTowards(transform.rotation, quaternion, navMeshAgent.angularSpeed * Time.fixedDeltaTime);
 	}
 
 	private Actor FindNearestVisibleHostile() {
@@ -243,8 +292,13 @@ public class EnemyController : AbstractEnemyController {
 		}
 	}
 
-	private void OnHit() {
+	// It is called in damageCalcUtil.cs
+	public override void OnDamaged(GameObject damageSource) {
 		StartTransitionTo(State.ATTACK);
+		lastKnownPosition = damageSource.transform.position;
+		lastTargetLostTime = Time.time;
+		isTargetLost = true;
+		Debug.Log("Taken damage");
 	}
 
 	protected void Start() {

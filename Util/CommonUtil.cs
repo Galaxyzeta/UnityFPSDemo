@@ -26,7 +26,7 @@ public class CommonUtil : MonoBehaviour {
 
 	public static void IfNullLogError <T>(T obj) {
 		if(obj == null) {
-			Debug.LogError(obj.GetType()+"is null !");
+			Debug.LogError(typeof(T)+"is null !");
 		}
 	}
 

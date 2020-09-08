@@ -1,6 +1,6 @@
 ﻿using UnityEngine;
 
-public class Actor : MonoBehaviour {
+public class Actor : Damageable {
     public const int TEAM_RED = 0;
     public const int TEAM_BLUE = 1;
 

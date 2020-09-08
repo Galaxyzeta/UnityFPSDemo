@@ -11,10 +11,4 @@ public class HealthPickable : Pickable {
 		health.Heal(healAmount, this.gameObject);
 		Destroy(this.gameObject);
 	}
-
-	protected override void FixedUpdate() {
-		base.FixedUpdate();
-		// Auto rotate for decorative use
-		gameObject.transform.Rotate(transform.up, selfRotateSpeed * Time.fixedDeltaTime);
-	}
 }

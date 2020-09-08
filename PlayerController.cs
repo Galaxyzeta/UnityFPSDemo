@@ -105,6 +105,18 @@ public class PlayerController : MonoBehaviour
         ApplyBaseUnstability(unstabilityModify);
 	}
 
+    private void HandleThrowWeapon() {
+        if(InputHandler.ThrowItemKeyDown()) {
+            int weaponCurrent = weaponManager.weaponCurrent;
+            if(weaponManager.weaponBag.Count > 1) {
+                GameObject throwObject = weaponManager.ThrowWeapon(weaponCurrent);
+                throwObject.transform.position = transform.position;
+            } else {
+                Debug.Log("Can't throw away last weapon.");
+            }
+        }
+    }
+
     private void ApplyBaseUnstability(float unstabilityModify) {
         weaponData.baseUnstability = unstabilityModify;
     }
@@ -513,6 +525,7 @@ public class PlayerController : MonoBehaviour
         InitBeforeUpdate();
 
         HandlePlayerMovement();
+        HandleThrowWeapon();
         HandleWeaponSwap();
         HandleShootInput();
         HandleReload();

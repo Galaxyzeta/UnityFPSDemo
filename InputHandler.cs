@@ -15,15 +15,15 @@ public class InputHandler: MonoBehaviour{
 	}
 
 	public static bool FireKeyDown() {
-		return Input.GetButtonDown("Fire1");
+		return Input.GetKeyDown(KeyCode.Mouse0);
 	}
 
 	public static bool FireKeyHeld() {
-		return Input.GetButton("Fire1");
+		return Input.GetKey(KeyCode.Mouse0);
 	}
 
 	public static bool FireKeyUp() {
-		return Input.GetButtonUp("Fire1");
+		return Input.GetKeyUp(KeyCode.Mouse0);
 	}
 
 	public static bool MouseWheelUp() {
@@ -50,12 +50,24 @@ public class InputHandler: MonoBehaviour{
 		return Input.GetAxis("Mouse Y");
 	}
 
+	public static bool CrouchKeyHeld() {
+		return Input.GetKey(KeyCode.LeftControl);
+	}
+
 	public static bool AimKeyDown() {
-		return Input.GetButton("Fire2");
+		return Input.GetKey(KeyCode.Mouse1);
 	}
 
 	public static bool JumpKeyDown() {
 		return Input.GetKeyDown(KeyCode.Space);
+	}
+
+	public static bool PickItemKeyDown() {
+		return Input.GetKeyDown(KeyCode.E);
+	}
+
+	public static bool ThrowItemKeyDown() {
+		return Input.GetKeyDown(KeyCode.G);
 	}
 
 

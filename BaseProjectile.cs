@@ -54,7 +54,7 @@ public class BaseProjectile : MonoBehaviour {
 		RaycastHit hit;
 		if (Physics.Raycast(transform.position, transform.forward, out hit, speed * Time.deltaTime, damageMask)) {
 			float damage = DamageInflictUtil.DamageLerp(maxDamage, minDamage, distanceTravelled, damageDecayRange, range);
-			DamageInflictUtil.InflictDamage(hit, owner, damage, inflictForce);
+			DamageInflictUtil.TryInflictDamage(hit, owner, damage, inflictForce);
 			Destroy(this.gameObject);
 		}
 	}

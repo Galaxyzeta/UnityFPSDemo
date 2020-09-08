@@ -76,7 +76,7 @@ public class BaseWeapon : MonoBehaviour
 	// private / partly private
 	protected LineRenderer lineRenderer;
 	public Vector3 bodyToAimRelative {get; protected set;}
-	public Actor owner {get; set;}
+	public Actor owner {get; set;} = null;
 	public float baseUnstability {get; set;}
 	public float currentCharge {get;set;} = 0;
 	public bool ownerIsPlayer = false;
@@ -128,19 +128,16 @@ public class BaseWeapon : MonoBehaviour
 	public bool TryShoot(Transform orgin) {
 		if(HasSufficientAmmo()) {
 			if(freeze == 0) {
-				Debug.Log("Shoot");
 				DoShoot(orgin);
 				return true;
 			}
 		} else {
 			// Start reloading...
 			if(reloadTime != maxReloadTime && isReloading == false) {
-				Debug.Log("Start to reload....");
 				reloadTime = maxReloadTime;
 				isReloading = true;
 			} else if(reloadTime == 0) {
 				// Reloading OK.
-				Debug.Log("Reload OK");
 				isReloading = false;
 				DoReload();
 			}
@@ -205,7 +202,7 @@ public class BaseWeapon : MonoBehaviour
 				float damage = DamageInflictUtil.DamageLerp(maxDamage, minDamage, 
 					Vector3.Distance(hit.point, origin.position), damageDecayRatio*range, range);
 
-				DamageInflictUtil.InflictDamage(hit, owner.gameObject, damage, inflictForce);
+				DamageInflictUtil.TryInflictDamage(hit, owner.gameObject, damage, inflictForce);
             }
         }
         RenderRay(hit, origin);
@@ -301,7 +298,7 @@ public class BaseWeapon : MonoBehaviour
 
 	void Awake() {
 		lineRenderer = CommonUtil.GetComponentFromSelfOrChildren<LineRenderer>(this);
-		CommonUtil.IfNullLogError<LineRenderer>(lineRenderer);
+
 
 		// Make attraction. AI use this to check attraction point.
 		attractionSource = gameObject.AddComponent<AttractionSource>();
@@ -311,6 +308,10 @@ public class BaseWeapon : MonoBehaviour
 	}
 
 	void Update() {
+		if(owner == null) {
+			return;
+		}
+
 		UpdateFreeze();
 		UpdateAccuracy();
 		UpdateReload();

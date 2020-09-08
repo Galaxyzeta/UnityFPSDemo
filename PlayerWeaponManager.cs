@@ -5,54 +5,91 @@ public class PlayerWeaponManager : MonoBehaviour {
 
 	public Player player {get; private set;}
 
-	public GameObject[] weaponBag;		// [GameObject] means WeaponPrefab here, [BaseWeapon] must be attached to it.
+	public List<GameObject> weaponBag;		// Weapon instance. Operations must be sync between weaponBag and prefabDefinition
 	public int maxWeapons = 3;
-	private int currentLength = 0;
+	public GameObject pickablePrefab;
 
-	private int weaponCurrent = -1;
+	public int weaponCurrent {get; set;} = -1;		// -1 means no weapon.
 
-	public bool AddWeapon(GameObject weaponPrefab) {
-		if(currentLength >= maxWeapons) {
+	public bool AddBlueprintWeapon(GameObject weaponPrefab) {
+		if(weaponBag.Capacity == weaponBag.Count) {
 			return false;
-		} else {
-			InitNewWeapon(weaponPrefab, currentLength);
-			currentLength ++;
-			return true;
 		}
+		weaponBag.Add(InstantiateWeapon(weaponPrefab));
+		return true;
 	}
 
-	private void InitNewWeapon(GameObject weaponPrefab, int emptyPos) {
-		weaponBag[emptyPos] = Instantiate(weaponPrefab);
+	public bool AddExistWeapon(GameObject weaponInstance) {
+		if(weaponBag.Capacity == weaponBag.Count) {
+			return false;
+		}
+		// IMPORTANT ! Otherwise, when player picks up weapon, the weapon object is stil at the root of pickable. 
+		// Then it will be deleted by weaponPickable, leaving a null reference to an object, which causes a bunch of errors.
+		AttachWeaponToPlayer(weaponInstance);	
+		weaponBag.Add(weaponInstance);
+		return true;
+	}
+
+	// Set weapon instance to player cam root. Do this after every instantiation.
+	private void AttachWeaponToPlayer(GameObject weaponInstance) {
 		// Let the weapon move with cam
-		weaponBag[emptyPos].transform.parent = player.cam.transform;
+		weaponInstance.transform.parent = player.cam.transform;
 		// Make child collider useless
-		ToggleChildColliders(weaponBag[emptyPos], false);
+		ToggleChildColliders(weaponInstance, false);
 		// Deactive unequipped weapons
-		weaponBag[emptyPos].SetActive(false);
+		weaponInstance.SetActive(false);
+	}
+
+	// Construct weapon instance by prefab definitions.
+	public GameObject InstantiateWeapon(GameObject weaponPrefab) {
+		GameObject obj = Instantiate<GameObject>(weaponPrefab);
+		AttachWeaponToPlayer(obj);
+		return obj;
 	}
 
 	public bool IsEmpty() {
-		return currentLength == 0;
+		return weaponBag.Count == 0;
 	}
 
-	public bool RemoveWeapon(int index) {
-		if(index >= 0 && index < currentLength) {
-			for(int i=index; i<currentLength-1; i++) {
-				weaponBag[i] = weaponBag[i+1];
-			}
-			weaponBag[--currentLength] = null;
-			return true;
-		}
-		return false;
+	public void RemoveWeapon(int index) {
+		// Destroy(weaponBag[index]);
+		weaponBag.RemoveAt(index);
+	}
+
+	// Destroy all attached information, create a model
+	public GameObject ThrowWeapon(int index) {
+		GameObject weaponInstance = weaponBag[index];
+		GameObject pickable = Instantiate<GameObject>(pickablePrefab);
+		
+		WeaponPickable weaponPickable = pickable.GetComponent<WeaponPickable>();
+		weaponPickable.needInstantiation = false;
+		weaponPickable.weaponPrefab = weaponInstance;
+		
+		BaseWeapon weaponData = weaponInstance.GetComponent<BaseWeapon>();
+		weaponData.owner = null;
+
+		weaponInstance.transform.SetParent(pickable.transform);
+
+		RemoveWeapon(index);
+		weaponCurrent = (int)Mathf.Clamp(weaponCurrent, 0, weaponBag.Count-1);
+		Debug.Log(weaponCurrent);
+		PrintList();
+		EquipWeapon(weaponCurrent);
+		return pickable;
+	}
+
+	public bool EquipEmpty() {
+		player.weaponPrefab = null;
+		return true;
 	}
 
 	// Set player's weapon prefab and weapon data.
-	public bool EquipWeapon(int index) {
-		if(index >= 0 && index < currentLength) {
-			GameObject wepaonPrefab = weaponBag[index];
-			BaseWeapon baseWeapon = wepaonPrefab.GetComponent<BaseWeapon>();
+	public void EquipWeapon(int index) {
+		if(index >= 0 && index < weaponBag.Count) {
+			GameObject weaponInstance = weaponBag[index];
+			BaseWeapon baseWeapon = weaponInstance.GetComponent<BaseWeapon>();
 			
-			player.weaponPrefab = wepaonPrefab;
+			player.weaponPrefab = weaponInstance;
 			player.weaponData = baseWeapon;
 			
 			baseWeapon.owner = player;
@@ -69,9 +106,10 @@ public class PlayerWeaponManager : MonoBehaviour {
 			}
 			weaponCurrent = index;
 			weaponBag[weaponCurrent].SetActive(true);
-			return true;
+		} else {
+			// @Warning: empty weapon will not be allowed
+			EquipEmpty();
 		}
-		return false;
 	}
 
 	private void ToggleChildColliders(GameObject weaponInstance, bool enabled) {
@@ -83,13 +121,14 @@ public class PlayerWeaponManager : MonoBehaviour {
 
 	// Whether the weapon to equip exists.
 	public bool CanEquip(int index) {
-		return index < currentLength && weaponBag[index] != null;
+		return index < weaponBag.Count && weaponBag[index] != null;
 	}
 
 	// Get next available weapon slot.
 	// asc = 1 | -1
 	public int GetNextAvailable(int asc) {
 		int nextpos = weaponCurrent + asc;
+		int currentLength = weaponBag.Count;
 		if(nextpos >= currentLength) {
 			nextpos = 0;
 		} else if (nextpos < 0) {
@@ -100,15 +139,19 @@ public class PlayerWeaponManager : MonoBehaviour {
 
 	// Reset current weapon number.
 	// @Warning : Should only be executed once!
-	public void Refresh() {
-		int i;
-		for(i=0; i<weaponBag.Length; i++) {
-			if(weaponBag[i] == null) {
-				break;
-			}
-			InitNewWeapon(weaponBag[i], i);
+	public void Init() {
+		weaponBag.Capacity = maxWeapons;
+		for(int i=0; i<weaponBag.Count; i++) {
+			weaponBag[i] = InstantiateWeapon(weaponBag[i]);
 		}
-		this.currentLength = i;
+	}
+
+	public void PrintList() {
+		string sb = "[LIST]";
+		foreach(GameObject obj in weaponBag) {
+			sb += obj.ToString();
+		}
+		Debug.Log(sb);
 	}
 
 	void Awake() {
