@@ -54,8 +54,12 @@ public class InputHandler: MonoBehaviour{
 		return Input.GetKey(KeyCode.LeftControl);
 	}
 
-	public static bool AimKeyDown() {
+	public static bool AimKeyHeld() {
 		return Input.GetKey(KeyCode.Mouse1);
+	}
+
+	public static bool AimKeyDown() {
+		return Input.GetKeyDown(KeyCode.Mouse1);
 	}
 
 	public static bool JumpKeyDown() {

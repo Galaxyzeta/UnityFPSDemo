@@ -3,8 +3,7 @@ using UnityEngine.UI;
 using System.Collections.Generic;
 
 // Do not operate position/rotation directly, these works should be done using [Player Motor]
-public class PlayerController : MonoBehaviour
-{
+public class FPSController : AbstractPlayer {
     [Header("Movement")]
 	[Tooltip("The absolute velocity magnitude when player walks")]
 	public float walkSpeed;
@@ -22,15 +21,21 @@ public class PlayerController : MonoBehaviour
     public float forwardDetectDistance = 0.05f;
 
 	private PlayerMotor motor;
-    private Player player;
-    private PlayerWeaponManager weaponManager;
+    private FPSController player;
 	private Animator weaponAnimator;
     private Camera cam;
-    private GameObject weaponPrefab;
     private LineRenderer lineRenderer;
-    private BaseWeapon weaponData;
-    private CrossHairData crossHair;
     private AttractionSource attractionSource;
+	public BaseWeaponAnimationController controller{get; set;}
+
+	public void ChangeAnimatorOnAnchor(Animator animator) {
+		Animator existedAnimator = anchor.GetComponent<Animator>();
+		existedAnimator.runtimeAnimatorController = animator.runtimeAnimatorController;
+	}
+
+	public Animator GetWeaponAnimator() {
+		return weaponData.GetComponent<Animator>();
+	}
 
     // Fov
     private float defaultFov;
@@ -133,7 +138,7 @@ public class PlayerController : MonoBehaviour
 
             Vector3 point2 = transform.position + capsule.center + Vector3.down * capsule.height * 0.5f;
             float distance = (cam.transform.position - point2).magnitude + capsule.radius + minFloatDistance;
-            Physics.Raycast(player.transform.position, Vector3.down, out hit, distance, groundMask);
+            Physics.Raycast(transform.position, Vector3.down, out hit, distance, groundMask);
 
             if(hit.collider != null) {
                 isAir = false;
@@ -189,7 +194,7 @@ public class PlayerController : MonoBehaviour
             }
 		}
 		// Do some animation
-		player.controller.IsRunning(isSprinting);
+		controller.IsRunning(isSprinting);
 
         // Apply motion
         // Detect available slope angle, and then move along it.
@@ -225,7 +230,7 @@ public class PlayerController : MonoBehaviour
     // Aiming perform
     private void HandleAiming() {
         // Aim input
-        if(InputHandler.AimKeyDown() && CanAim()) {
+        if(InputHandler.AimKeyHeld() && CanAim()) {
             if(aimingProgress < weaponData.maxAimingProgress) {
                 aimingProgress += CommonUtil.GetStepUpdate();
             }
@@ -428,7 +433,7 @@ public class PlayerController : MonoBehaviour
     public void TryReload() {
         if (CanReload()){
             isReloading = true;
-            player.controller.TriggerReload();
+            controller.TriggerReload();
             Reload();
         }
     }
@@ -469,20 +474,20 @@ public class PlayerController : MonoBehaviour
     private void InitBeforeUpdate() {
         hasFiredThisFrame = false;
         hasReloadCancelled = false;
-        weaponData = player.weaponData;
-        crossHair = player.crossHair;
-        weaponPrefab = player.weaponPrefab;
+        weaponData = weaponData;
+        crossHair = crossHair;
+        weaponPrefab = weaponPrefab;
     }
 
     // Set all complex animation to the weapon animator.
     
     private void SubmitAnimatorStatus() {
-        Animator weaponAnimator = player.GetWeaponAnimator();
+        Animator weaponAnimator = GetWeaponAnimator();
         // Whether reloading animation should be played or not
-        player.controller.IsReloading(isReloading);
+        controller.IsReloading(isReloading);
         // Whether to reset animation to idle or not:
         if(hasFiredThisFrame || IsAiming()) {
-            player.controller.TriggerReset();
+            controller.TriggerReset();
         }
         // @Improve @WIP
         AnimatorClipInfo[] clips = weaponAnimator.GetCurrentAnimatorClipInfo(0);
@@ -492,34 +497,38 @@ public class PlayerController : MonoBehaviour
         }
         // Set weapon reloading animation speed. (1.0 x multiplier)
         if(clipLength != 0) {
-            player.controller.FloatMultReloading(clipLength / weaponData.maxReloadTime * CommonUtil.FPS);
+            controller.FloatMultReloading(clipLength / weaponData.maxReloadTime * CommonUtil.FPS);
         }
 
     }
 
     // ==== Life span ====
-    void Awake() {
-        player = GetComponent<Player>();
-        CommonUtil.IfNullLogError<Player>(player);
+    protected override void Awake() {
+		base.Awake();
 
         motor = GetComponent<PlayerMotor>();
         CommonUtil.IfNullLogError<PlayerMotor>(motor);
 
-        weaponManager = player.GetComponent<PlayerWeaponManager>();
+        weaponManager = GetComponent<PlayerWeaponManager>();
 		CommonUtil.IfNullLogError<PlayerWeaponManager>(weaponManager);
 
         attractionSource = gameObject.AddComponent<AttractionSource>();
 		AttractionSourceManager.Register(attractionSource);
-    }
-    // Start is called before the first frame update
-    void Start() {
-        cam = player.cam;
-        weaponPrefab = player.weaponPrefab;
-        weaponData = player.weaponData;
-        crossHair = player.crossHair;
+	}
+
+	protected override void Start() {
+		base.Start();
+
+		controller = new BaseWeaponAnimationController();
+		controller.player = this;
+
+        cam = mainCamera;
+        weaponPrefab = weaponPrefab;
+        weaponData = weaponData;
+        crossHair = crossHair;
         defaultFov = cam.fieldOfView;
         camRelativeVec = cam.transform.position - this.transform.position;
-    }
+	}
 
     void Update() {
         InitBeforeUpdate();

@@ -2,9 +2,8 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class TPSController : MonoBehaviour {
+public class TPSController : AbstractPlayer {
 
-    public Camera mainCamera;
     public Transform groundCheckTransform;
     public float gravity = 9.81f;
     public float walkSpeed = 2f;
@@ -13,28 +12,27 @@ public class TPSController : MonoBehaviour {
     public float groundCheckDistance = 0;
     public float initialJumpVelocity = 20f;
     public LayerMask groundMask;
-    public Transform rightHandTransform;
-    public GameObject weaponPrefab;
     public Vector3 weaponOffeset = new Vector3(0f,0f,0.1f);
-
+    public float speedAcceleration = 4f;
     public float veloctiy;
+    public float maxAimValue = 30;
+    public float maxAimMultiplier = 0.5f;
+
     public bool isGrounded {get; set;}
-    public CharacterController characterController {get; set;}
     public Animator animator {get;set;}
     public Vector3 cameraRelative {get; set;}
     public float currentSpeed {get; set;} = 0;
-    public float speedAcceleration = 4f;
+    private float aimValue = 0;
 
-    void Awake() {
-        characterController = GetComponent<CharacterController>();
+    protected override void Awake() {
+        base.Awake();
+        
         animator = GetComponentInChildren<Animator>();
         cameraRelative = mainCamera.transform.position - this.transform.position;
     }
 
-    void Start() {
-        weaponPrefab = Instantiate<GameObject>(weaponPrefab);
-        weaponPrefab.transform.SetParent(rightHandTransform);
-        weaponPrefab.transform.localPosition = weaponOffeset;
+    protected override void Start() {
+        base.Start();
     }
 
     void Update() {
@@ -47,23 +45,36 @@ public class TPSController : MonoBehaviour {
             veloctiy = 0;
         }
 
-        // Camera rotation
+        // Camera Input
         float mouseX = InputHandler.GetViewHorizontalAxis();
         float mouseY = -InputHandler.GetViewVerticalAxis();
-        mainCamera.transform.RotateAround(this.transform.position, Vector3.up, mouseX);
-        mainCamera.transform.RotateAround(this.transform.position, mainCamera.transform.right, mouseY);
 
-        // Camera position
-        mainCamera.transform.position = transform.position + mainCamera.transform.rotation * cameraRelative;
+        // Aiming
+        if(InputHandler.AimKeyHeld()) {
+            aimValue = Mathf.Clamp(aimValue + CommonUtil.GetStepUpdate(), 0, maxAimValue);
+        } else {
+            aimValue = Mathf.Clamp(aimValue - CommonUtil.GetStepUpdate(), 0, maxAimValue);
+        }
+        mainCamera.transform.position = transform.position + mainCamera.transform.rotation*cameraRelative*(1-maxAimMultiplier * aimValue/maxAimValue);
+
+        // Shoot
+        if(InputHandler.FireKeyHeld()) {
+            Debug.Log("fire");
+            weaponData.TryShoot(mainCamera.transform);
+        }
+
+        // Rotation
+        transform.RotateAround(this.transform.position, Vector3.up, mouseX);
+        mainCamera.transform.RotateAround(this.transform.position, mainCamera.transform.right, mouseY);
         
-        // Player Move
+        // Player Input
         float horizontal = InputHandler.GetHorizontalAxis();
         float vertical = InputHandler.GetVerticalAxis();
 
         // Player rotate with camera
         transform.Rotate(new Vector3(0, mouseX, 0), Space.Self);
 
-        // Speed calculation
+        // Flat movement speed calculation
         float spdLimiter = walkSpeed;
         if(InputHandler.SprintKeyHeld()) {
             spdLimiter = runningSpeed;
@@ -73,6 +84,13 @@ public class TPSController : MonoBehaviour {
             spdLimiter = -walkSpeed;
         }
         currentSpeed = SpeedLerpUtil.SpeedLerp(currentSpeed, spdLimiter, speedAcceleration);
+
+        // === Player Jump ===
+        if(InputHandler.JumpKeyDown() && isGrounded) {
+            isGrounded = false;
+            veloctiy += initialJumpVelocity;
+        }
+        characterController.Move(veloctiy * Time.deltaTime * this.transform.up);
 
         // Apply motion
         Vector3 motion = transform.forward * vertical + transform.right * horizontal;
@@ -84,12 +102,8 @@ public class TPSController : MonoBehaviour {
 
         // Apply animation
         animator.SetFloat("motionSpeed", currentSpeed);
-
-        // === Player Jump ===
-        if(InputHandler.JumpKeyDown() && isGrounded) {
-            veloctiy += initialJumpVelocity;
-        }
-
-        characterController.Move(veloctiy * Time.deltaTime * this.transform.up);
+        animator.SetFloat("jumpSpeed", veloctiy);
+        animator.SetBool("isGrounded", isGrounded);
+        
     }
 }

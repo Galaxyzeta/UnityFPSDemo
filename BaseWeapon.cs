@@ -191,7 +191,7 @@ public class BaseWeapon : MonoBehaviour
         Debug.DrawRay(origin.position, towardsDirection, Color.red);
 
         if (Physics.Raycast(emitPosition, towardsDirection, out hit, range, mask)) {
-            Debug.DrawRay(emitPosition, towardsDirection, Color.red, 2f);
+            // Debug.DrawRay(emitPosition, towardsDirection, Color.red, 2f);
             if(hit.collider != null) {
                 Debug.DrawLine(emitPosition, hit.point, Color.magenta, 2f);
 				// === Debug only ===
@@ -258,8 +258,8 @@ public class BaseWeapon : MonoBehaviour
 	// Player Only
 	public void ResizeCrossHair() {
 		if(ownerIsPlayer) {
-			Player player = (Player)owner;
-			player.crossHair.maxScreenRadius = CommonUtil.DistanceProjectionOnCameraScreen(player.cam, range, maxSpreadRadius);
+			AbstractPlayer player = (AbstractPlayer)owner;
+			player.crossHair.maxScreenRadius = CommonUtil.DistanceProjectionOnCameraScreen(player.mainCamera, range, maxSpreadRadius);
 		}
 	}
 
@@ -267,7 +267,7 @@ public class BaseWeapon : MonoBehaviour
 	// Player Only
 	public void UpdateCrossHairRadius() {
 		if(ownerIsPlayer) {
-			Player player = (Player)owner;
+			AbstractPlayer player = (AbstractPlayer)owner;
 			player.crossHair.SetProgressRadius(GetUnstableProgress()-minStability/maxUnstability);
 		}
 	}

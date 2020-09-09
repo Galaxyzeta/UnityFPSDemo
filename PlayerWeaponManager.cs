@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 public class PlayerWeaponManager : MonoBehaviour {
 
-	public Player player {get; private set;}
+	public AbstractPlayer player {get; private set;}
 
 	public List<GameObject> weaponBag;		// Weapon instance. Operations must be sync between weaponBag and prefabDefinition
 	public int maxWeapons = 3;
@@ -33,7 +33,7 @@ public class PlayerWeaponManager : MonoBehaviour {
 	// Set weapon instance to player cam root. Do this after every instantiation.
 	private void AttachWeaponToPlayer(GameObject weaponInstance) {
 		// Let the weapon move with cam
-		weaponInstance.transform.parent = player.cam.transform;
+		weaponInstance.transform.parent = player.mainCamera.transform;
 		// Make child collider useless
 		ToggleChildColliders(weaponInstance, false);
 		// Deactive unequipped weapons
@@ -72,7 +72,6 @@ public class PlayerWeaponManager : MonoBehaviour {
 
 		RemoveWeapon(index);
 		weaponCurrent = (int)Mathf.Clamp(weaponCurrent, 0, weaponBag.Count-1);
-		Debug.Log(weaponCurrent);
 		PrintList();
 		EquipWeapon(weaponCurrent);
 		return pickable;
@@ -96,7 +95,7 @@ public class PlayerWeaponManager : MonoBehaviour {
 			baseWeapon.ownerIsPlayer = true;
 			baseWeapon.ResizeCrossHair();
 			// Init weapon's place.
-			baseWeapon.transform.position = player.GetComponent<PlayerMotor>().globalDefaultPoint.position;
+			baseWeapon.transform.position = player.anchor.transform.position;
 			// Handle deriviation relations in order to make animation system works properly.
 			baseWeapon.transform.SetParent(player.anchor.transform);
 
@@ -139,7 +138,8 @@ public class PlayerWeaponManager : MonoBehaviour {
 
 	// Reset current weapon number.
 	// @Warning : Should only be executed once!
-	public void Init() {
+	public void Init(AbstractPlayer player) {
+		this.player = player;
 		weaponBag.Capacity = maxWeapons;
 		for(int i=0; i<weaponBag.Count; i++) {
 			weaponBag[i] = InstantiateWeapon(weaponBag[i]);
@@ -153,9 +153,4 @@ public class PlayerWeaponManager : MonoBehaviour {
 		}
 		Debug.Log(sb);
 	}
-
-	void Awake() {
-		player = gameObject.GetComponent<Player>();
-	}
-
 }

@@ -4,7 +4,7 @@ public class PlayerMotor : MonoBehaviour {
 
 	private Rigidbody rb;
 
-	private Player player;
+	private AbstractPlayer player;
 	private Camera cam;
 	private GameObject weaponPrefab;
 
@@ -110,8 +110,8 @@ public class PlayerMotor : MonoBehaviour {
 	void Start() {
 		// Fetch resources
 		rb = gameObject.GetComponent<Rigidbody>();
-		player = gameObject.GetComponent<Player>();
-		cam = player.cam;
+		player = gameObject.GetComponent<AbstractPlayer>();
+		cam = player.mainCamera;
 		weaponPrefab = player.weaponPrefab;
 
 		// Set basic rotations.

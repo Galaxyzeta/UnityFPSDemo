@@ -2,7 +2,7 @@ using UnityEngine;
 
 public class BaseWeaponAnimationController : ScriptableObject {
 
-	public Player player {get; set;}
+	public FPSController player {get; set;}
 
 	// ==== Trigger ====
 	public void TriggerReload() {
