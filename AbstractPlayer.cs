@@ -5,6 +5,7 @@ public class AbstractPlayer : Actor {
 	[Header("AbstractController")]
 	public Camera mainCamera;
 	public Transform anchor;
+	public bool hideMouseCursor = true;
 
 	public CharacterController characterController {get; private set;}
 	public Health health{get; protected set;}
@@ -12,8 +13,6 @@ public class AbstractPlayer : Actor {
 	public GameObject weaponPrefab{get; set;}
 	public CrossHairData crossHair{get; protected set;}
 	public PlayerWeaponManager weaponManager{get; protected set;}
-	
-	
 
 	protected virtual void Awake() {
 		health = GetComponent<Health>();
@@ -30,6 +29,10 @@ public class AbstractPlayer : Actor {
 		weaponManager.Init(this);
 		// Weapon prefab will be set when equipping.
 		weaponManager.EquipWeapon(0);
+		if(hideMouseCursor) {
+			Cursor.visible = false;
+			Cursor.lockState = CursorLockMode.Locked;
+		}
 	}
 
 }

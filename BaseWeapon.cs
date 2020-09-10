@@ -69,6 +69,8 @@ public class BaseWeapon : MonoBehaviour
 	[Header("Position")]
 	public Transform weaponAimPoint;
 	public Transform weaponEffectPoint;
+	public Transform leftHandIK;
+	public Transform rightHandIK;
 
 	[Header("Debug")]
 	public GameObject debugHitPointPrefab;

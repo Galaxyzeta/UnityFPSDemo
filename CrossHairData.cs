@@ -9,19 +9,21 @@ public class CrossHairData : MonoBehaviour {
     public float crossHairLength = 2.5f;
     public float minScreenRadius = 1.5f;
     public float maxScreenRadius = 8f;
+    public float lerpAcceleration = 2f;
     public CrossHairType type = CrossHairType.CROSSED;
     public Material material;
     public Color starColor;
     private bool isVisible = true;
 
-    public float currentRadius {get; private set;}
-
+    public float targetRadius {get; private set;}
+    public float currentRadius {get; private set;}      // Current radius is a speed-lerp of target radius. We use a fake lerp value to smooth the tween transition !
+ 
     public void SetRadius(float radius) {
-        this.currentRadius = radius;
+        this.targetRadius = radius;
     }
 
     public void SetProgressRadius(float progress) {
-        this.currentRadius = Mathf.Lerp(minScreenRadius, maxScreenRadius, progress);
+        this.targetRadius = Mathf.Lerp(minScreenRadius, maxScreenRadius, progress);
     }
 
     public void SetVisible(bool isVisible) {
@@ -83,8 +85,12 @@ public class CrossHairData : MonoBehaviour {
 
     // === LIFE SPAN ===
     private void Start() {
-        currentRadius = minScreenRadius;
+        targetRadius = minScreenRadius;
         material.color = this.starColor;
+    }
+
+    private void Update() {
+        currentRadius = TweenLerpUtil.SpeedLerp(currentRadius, targetRadius, lerpAcceleration);
     }
 
 }

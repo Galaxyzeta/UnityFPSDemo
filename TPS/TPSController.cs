@@ -59,7 +59,6 @@ public class TPSController : AbstractPlayer {
 
         // Shoot
         if(InputHandler.FireKeyHeld()) {
-            Debug.Log("fire");
             weaponData.TryShoot(mainCamera.transform);
         }
 
@@ -83,7 +82,7 @@ public class TPSController : AbstractPlayer {
         } else if (vertical < 0) {
             spdLimiter = -walkSpeed;
         }
-        currentSpeed = SpeedLerpUtil.SpeedLerp(currentSpeed, spdLimiter, speedAcceleration);
+        currentSpeed = TweenLerpUtil.SpeedLerp(currentSpeed, spdLimiter, speedAcceleration);
 
         // === Player Jump ===
         if(InputHandler.JumpKeyDown() && isGrounded) {
@@ -106,4 +105,9 @@ public class TPSController : AbstractPlayer {
         animator.SetBool("isGrounded", isGrounded);
         
     }
+
+    void OnRenderObject() {
+		// Draw cross hair
+		crossHair.DrawLine(new Vector2(Screen.width / 2, Screen.height / 2));
+	}
 }

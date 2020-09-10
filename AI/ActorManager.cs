@@ -6,7 +6,6 @@ public class ActorManager : MonoBehaviour {
 	public static List<Actor> actors {get; set;} = new List<Actor>();
 
 	public static void Register(Actor actor) {
-		Debug.Log(actor);
 		actors.Add(actor);
 	}
 

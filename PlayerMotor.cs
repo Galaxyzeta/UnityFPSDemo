@@ -2,17 +2,18 @@ using UnityEngine;
 
 public class PlayerMotor : MonoBehaviour {
 
-	private Rigidbody rb;
+	public float gravity = 9.81f;
+
+	private CharacterController cc;
 
 	private AbstractPlayer player;
 	private Camera cam;
 	private GameObject weaponPrefab;
 
-	private Vector3 velocity;
-	private Quaternion playerRotation;
-	private float thrustForce;
-	private float jumpForce;
-	private Quaternion camOffsetRotation;
+	private Vector3 flatVelocity;
+	public float verticalSpeed;
+	private Quaternion inputRotation;
+	private Quaternion camAdditionalRotation;
 
 	private Quaternion basicCamRotation;
 
@@ -23,31 +24,30 @@ public class PlayerMotor : MonoBehaviour {
 
 	private float camFov;
 
-	public float gravity = 0.1f;
 	public float maxVerticalSpeed = 2f;
 	public float verticalAngleRestriction = 89f;
 	public Transform globalDefaultPoint;
     public Transform globalAimPoint;
 	public Transform globalWeaponSpawnPoint;
 
-	public void ApplyVelocity(Vector3 deltaVelocity) {
-		this.velocity += deltaVelocity;
+	public void ApplyFlatMotion(Vector3 deltaVelocity) {
+		this.flatVelocity += deltaVelocity;
 	}
 
-	public void ApplyThrustForce(float thrustForce) {
-		this.thrustForce += thrustForce;
+	public void ApplyVerticalSpeed(float deltaSpeed) {
+		this.verticalSpeed +=  deltaSpeed;
 	}
 
-	public void ApplyJumpForce(float jumpForce) {
-		this.jumpForce = jumpForce;
+	public void ResetVerticalSpeed() {
+		this.verticalSpeed = 0;
 	}
 
-	public void ApplyRotation(Quaternion deltaRotation) {
-		this.playerRotation *= deltaRotation;
+	public void ApplyInputRotation(Quaternion deltaRotation) {
+		this.inputRotation *= deltaRotation;
 	}
 
-	public void ApplyCamRotation(Quaternion rotation) {
-		this.camOffsetRotation *= rotation;
+	public void ApplyCamAdditionalRotation(Quaternion rotation) {
+		this.camAdditionalRotation *= rotation;
 	}
 
 	public void ApplyWeaponLocalPosition(Vector3 position) {
@@ -64,13 +64,8 @@ public class PlayerMotor : MonoBehaviour {
 
 	public void ResetUpdateCache() {
 		weaponOffsetPosition = weaponlocalPositionOffset = Vector3.zero;
-		playerRotation = camOffsetRotation = weaponOffSetRotation = Quaternion.Euler(0f,0f,0f);
-		
-	}
-
-	public void ResetFixedUpdateCache() {
-		thrustForce = jumpForce = 0f;
-		velocity = Vector3.zero;
+		inputRotation = camAdditionalRotation = weaponOffSetRotation = Quaternion.Euler(0f,0f,0f);
+		flatVelocity = Vector3.zero;
 	}
 
 	private float ConvertAngle(float angle) {
@@ -109,58 +104,51 @@ public class PlayerMotor : MonoBehaviour {
 
 	void Start() {
 		// Fetch resources
-		rb = gameObject.GetComponent<Rigidbody>();
 		player = gameObject.GetComponent<AbstractPlayer>();
 		cam = player.mainCamera;
 		weaponPrefab = player.weaponPrefab;
+		cc = player.characterController;
 
 		// Set basic rotations.
 		basicCamRotation = cam.transform.rotation;
 		
-		// Clear data for initial use.
-		ResetFixedUpdateCache();
 		ResetUpdateCache();
-	}
-
-	void FixedUpdate() {
-		
-		// General movement
-		if(velocity != Vector3.zero) {
-            rb.MovePosition(transform.position + velocity * Time.fixedDeltaTime);
-        }
-		// Thruster movement
-        if(thrustForce > 0f) {
-            rb.AddForce(thrustForce * transform.up * Time.fixedDeltaTime, ForceMode.Acceleration);
-        }
-		// Jump
-		if(jumpForce > 0) {
-			rb.AddForce(new Vector3(0, jumpForce * Time.fixedDeltaTime, 0), ForceMode.VelocityChange);
-		}
-
-		// Clean up data to prevent accumulations
-		ResetFixedUpdateCache();
-		
 	}
 
 	// Calculate player's movement all in this function.
 	void LateUpdate() {
+
+		// General movement
+		if(flatVelocity != Vector3.zero) {
+            cc.Move(flatVelocity * Time.deltaTime);
+        }
+		// Vertical movement
+		// -- Gravity effect
+
+		if(verticalSpeed != 0) {
+			cc.Move(verticalSpeed * Vector3.up * Time.deltaTime);
+		}
+		verticalSpeed -= gravity;
+
 		// Keep variable up-to-date. (A substitution of C lang pointer! )
 		weaponPrefab = player.weaponPrefab;
 		
 		// General rotation: player, cam, weapon.
 		// Rigidbody rotation only operate Y-Axis (horizontal rotation) !
-        rb.MoveRotation(rb.rotation * playerRotation);
+        //rb.MoveRotation(rb.rotation * inputRotation);
+		Vector3 euler = inputRotation.eulerAngles;
+		transform.Rotate(new Vector3(0, euler.y, 0));
 
 		// Calculate basic camera rotation. Important.
 		float verticalAngle = basicCamRotation.eulerAngles.x;
-		float horizontalAngle = rb.transform.rotation.eulerAngles.y;
+		float horizontalAngle = transform.eulerAngles.y;
 		// Must clamp view rotation. Important
 		basicCamRotation = Quaternion.Euler(ClampVerticalAngle(verticalAngle), horizontalAngle, 0f);
 
 		// Reset camera rotation to its basic state (Only rotated through rigidbody movement)
 		cam.transform.rotation = basicCamRotation;
 		// Then, apply animated effects on it.
-		cam.transform.rotation *= camOffsetRotation;
+		cam.transform.rotation *= camAdditionalRotation;
 
 		// Weapon position: using localposition is much more easier!
 		if(weaponPrefab) {

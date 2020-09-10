@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public class SpeedLerpUtil : MonoBehaviour {
+public class TweenLerpUtil : MonoBehaviour {
 
 	public static float SpeedLerp(float currentSpeed, float targetSpeed, float acceleration) {
 		if(currentSpeed < targetSpeed) {
